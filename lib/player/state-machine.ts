@@ -55,6 +55,7 @@ export function playerReducer(state: PlayerState, action: PlayerAction): PlayerS
       return { ...state, current: "rewind", isRewinding: true };
 
     case "START_REWIND":
+      if (state.current !== "consequence") return state;
       return { ...state, isRewinding: true };
 
     case "REWIND_COMPLETE":
