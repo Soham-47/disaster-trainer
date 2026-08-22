@@ -60,7 +60,7 @@ Next.js / React / TypeScript
   └── Approved fallback media
 ```
 
-No code has been added yet. The complete implementation specification is maintained locally in [PLAN.md](../outputs/PLAN.md) for the team’s working copy.
+No code has been added yet. The complete implementation specification is maintained in the team’s local working copy of `PLAN.md`.
 
 ## Repository status
 
