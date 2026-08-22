@@ -40,13 +40,21 @@ The fire scenario is grounded in [American Red Cross home-fire guidance](https:/
 
 This is an experimental preparedness-practice prototype, not certified training or a physically exact disaster simulator.
 
+## Team ownership
+
+| Member | Person | Primary branch | Ownership |
+|---|---|---|---|
+| Member A | Krishna | `feat/reactor-adapter` | Reactor authentication, LingBot runtime, event handling, streaming, and fallbacks. |
+| Member B | You | `feat/player-flow` | Experience player, state transitions, decision UI, rewind, debrief, transfer, and accessibility. |
+| Member C | Soumodeep | `feat/scenario-engine` | Scenario packs, source-grounded safety rules, prompt constraints, scoring, and tests. |
+
 ## Team workflow
 
 Use one shared repository with a protected `main` branch and short-lived feature branches:
 
-- `feat/reactor-adapter` — Reactor integration, streaming, events, and fallbacks.
-- `feat/player-flow` — React experience states, choices, rewind, debrief, transfer, and accessibility.
-- `feat/scenario-engine` — Scenario packs, safety rules, prompt constraints, scoring, and tests.
+- `feat/reactor-adapter` — Krishna: Reactor integration, streaming, events, and fallbacks.
+- `feat/player-flow` — You: React experience states, choices, rewind, debrief, transfer, and accessibility.
+- `feat/scenario-engine` — Soumodeep: Scenario packs, safety rules, prompt constraints, scoring, and tests.
 
 Keep scenario types, the player state machine, and the public world-model adapter interface contract-first. Open a pull request for each focused change, run lint/typecheck/tests/build before merging, and synchronize from `main` at each 60–90 minute build checkpoint.
 
