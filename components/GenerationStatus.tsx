@@ -82,7 +82,7 @@ export const GenerationStatus: React.FC<GenerationStatusProps> = ({
     <div className={`relative z-20 inline-block ${className}`}>
       <button
         onClick={() => setShowDetails(!showDetails)}
-        className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-mono backdrop-blur-md shadow-lg transition-all duration-300 hover:scale-102 ${badge.borderClass}`}
+        className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-mono backdrop-blur-md shadow-lg transition-all duration-300 hover:scale-[1.02] ${badge.borderClass}`}
       >
         <span className={`w-2 h-2 rounded-full ${badge.dotClass}`} />
         <span className={`font-medium ${badge.textClass}`}>{badge.label}</span>
@@ -123,3 +123,4 @@ export const GenerationStatus: React.FC<GenerationStatusProps> = ({
     </div>
   );
 };
+

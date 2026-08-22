@@ -1,13 +1,49 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "fs";
 import path from "path";
 import { ReactorClient } from "../lib/reactor/client";
+import { POST as tokenRoute } from "../app/api/reactor-token/route";
 
 describe("ReactorClient Adapter", () => {
   let client: ReactorClient;
 
   beforeEach(() => {
     client = new ReactorClient();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("requests a model-scoped Reactor token using the documented contract", async () => {
+    const originalKey = process.env.REACTOR_API_KEY;
+    process.env.REACTOR_API_KEY = "test-reactor-key";
+    const upstreamFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ jwt: "jwt_test_token", expires_at: 123 }),
+    });
+    vi.stubGlobal("fetch", upstreamFetch);
+
+    try {
+      const response = await tokenRoute();
+      const [, options] = upstreamFetch.mock.calls[0];
+      const body = JSON.parse(options.body);
+
+      expect(options.headers["Reactor-API-Key"]).toBe("test-reactor-key");
+      expect(body).toEqual({
+        authorization_details: [
+          {
+            type: "session",
+            resources: { models: { match: ["reactor/lingbot-world-2"] } },
+            constraints: { max_sessions: 10 },
+          },
+        ],
+      });
+      expect(await response.json()).toMatchObject({ token: "jwt_test_token", mode: "live" });
+    } finally {
+      if (originalKey === undefined) delete process.env.REACTOR_API_KEY;
+      else process.env.REACTOR_API_KEY = originalKey;
+    }
   });
 
   it("should initialize with idle status", () => {
@@ -111,19 +147,20 @@ describe("ReactorClient Adapter", () => {
     expect(fs.existsSync(referenceImagePath)).toBe(true);
   });
 
-  it("should deliver frames to the onFrame callback", async () => {
+  it("does not claim live frames when token acquisition fails", async () => {
     let frameReceived = false;
     await client.start({
       referenceImage: "/references/bedroom-fire.jpg",
       prompt: "Testing frame delivery",
       seed: 42,
       fallbackAsset: "/fallbacks/fire-bedroom-orient.mp4",
-      onFrame: () => {
-        frameReceived = true;
+      onFrame: (frame) => {
+        if (frame) frameReceived = true;
       },
     });
 
-    // In fallback mode, fallback is active
     expect(client.getStatus()).toBe("fallback");
+    expect(frameReceived).toBe(false);
   });
 });
+

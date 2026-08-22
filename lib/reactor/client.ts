@@ -37,8 +37,10 @@ export class ReactorClient implements WorldModelAdapter {
   private referenceImage: string = "";
   private capturedDecisionFrame: string | null = null;
   private frameCallback?: (frame: unknown) => void;
-  private timeoutTimer: NodeJS.Timeout | null = null;
+  private timeoutTimer: ReturnType<typeof setTimeout> | null = null;
   private model: LingbotWorld2Model | null = null;
+  private imageAccepted = false;
+  private promptAccepted = false;
 
   // Timeout bounds (in ms) from project specification
   private readonly TIMEOUTS = {
@@ -157,6 +159,10 @@ export class ReactorClient implements WorldModelAdapter {
     // Reset previous connection if any
     await this.cleanupModel();
 
+    this.currentMode = "live";
+    this.activeFallbackAsset = null;
+    this.imageAccepted = false;
+    this.promptAccepted = false;
     this.referenceImage = input.referenceImage;
     this.currentPrompt = input.prompt;
     this.currentSeed = input.seed;
@@ -180,7 +186,12 @@ export class ReactorClient implements WorldModelAdapter {
       this.model = new LingbotWorld2Model();
 
       // Bind SDK events to application event emitter
-      this.model.onImageAccepted((msg) => {
+      this.model.onImageAccepted(() => {
+        this.clearTimeoutTimer();
+        this.imageAccepted = true;
+        if (this.promptAccepted && (this.status === "uploading_image" || this.status === "ready")) {
+          this.setStatus("ready");
+        }
         this.events.emit("image_accepted", {
           referenceImage: this.referenceImage,
           timestamp: Date.now(),
@@ -188,6 +199,13 @@ export class ReactorClient implements WorldModelAdapter {
       });
 
       this.model.onPromptAccepted((msg) => {
+        if (this.status !== "generating" && this.status !== "paused") {
+          this.clearTimeoutTimer();
+        }
+        this.promptAccepted = true;
+        if (this.imageAccepted && (this.status === "uploading_image" || this.status === "ready")) {
+          this.setStatus("ready");
+        }
         this.events.emit("prompt_accepted", {
           prompt: msg.prompt,
           timestamp: Date.now(),
@@ -201,8 +219,7 @@ export class ReactorClient implements WorldModelAdapter {
         });
       });
 
-      this.model.onGenerationStarted((msg) => {
-        this.clearTimeoutTimer();
+      this.model.onGenerationStarted(() => {
         this.setStatus("generating");
         this.events.emit("generation_started", {
           sessionId: `sess_${Date.now()}`,
@@ -219,7 +236,7 @@ export class ReactorClient implements WorldModelAdapter {
         });
       });
 
-      this.model.onGenerationPaused((msg) => {
+      this.model.onGenerationPaused(() => {
         this.clearTimeoutTimer();
         this.setStatus("paused");
         this.events.emit("generation_paused", {
@@ -228,7 +245,7 @@ export class ReactorClient implements WorldModelAdapter {
         });
       });
 
-      this.model.onGenerationResumed((msg) => {
+      this.model.onGenerationResumed(() => {
         this.clearTimeoutTimer();
         this.setStatus("generating");
         this.events.emit("generation_resumed", {
@@ -242,12 +259,17 @@ export class ReactorClient implements WorldModelAdapter {
         this.events.emit("command_error", {
           code: msg.command,
           message: msg.reason,
-          fatal: false,
+          fatal: true,
           timestamp: Date.now(),
         });
+        void this.useFallback(defaultFallback);
       });
 
       this.model.onMainVideo((track, stream) => {
+        this.clearTimeoutTimer();
+        if (this.status !== "paused") {
+          this.setStatus("generating");
+        }
         if (this.frameCallback) {
           this.frameCallback({ track, stream });
         }
@@ -259,9 +281,9 @@ export class ReactorClient implements WorldModelAdapter {
         });
       });
 
-      this.model.on("error", (err: any) => {
+      this.model.on("error", (err: unknown) => {
         console.warn("[ReactorClient] Transport/SDK Error:", err);
-        this.useFallback(defaultFallback);
+        void this.useFallback(defaultFallback);
       });
 
       // Connect SDK
@@ -288,8 +310,8 @@ export class ReactorClient implements WorldModelAdapter {
       const fileRef = await this.model.uploadFile(imageBlob, { name: "reference.jpg" });
       await this.model.setImage({ image: fileRef });
 
-      // Step 3: Set Seed & Prompt
-      this.setStatus("ready");
+      // Step 3: Set Seed & Prompt. The SDK events above remain the source
+      // of truth for acceptance; these calls only enqueue the commands.
       this.scheduleTimeout(this.TIMEOUTS.PROMPT, "prompt acceptance", defaultFallback);
 
       await this.model.setSeed({ seed: this.currentSeed });
@@ -310,11 +332,7 @@ export class ReactorClient implements WorldModelAdapter {
       try {
         await this.model.pause();
       } catch (err) {
-        this.setStatus("paused");
-        this.events.emit("generation_paused", {
-          capturedFrame: this.capturedDecisionFrame || undefined,
-          timestamp: Date.now(),
-        });
+        await this.useFallback(this.activeFallbackAsset || "/fallbacks/fire-bedroom-orient.mp4");
       }
     } else {
       this.setStatus("paused");
@@ -330,11 +348,7 @@ export class ReactorClient implements WorldModelAdapter {
       try {
         await this.model.resume();
       } catch (err) {
-        this.setStatus("generating");
-        this.events.emit("generation_resumed", {
-          prompt: this.currentPrompt,
-          timestamp: Date.now(),
-        });
+        await this.useFallback(this.activeFallbackAsset || "/fallbacks/fire-bedroom-orient.mp4");
       }
     } else {
       this.setStatus("generating");
@@ -382,6 +396,8 @@ export class ReactorClient implements WorldModelAdapter {
     this.referenceImage = "";
     this.capturedDecisionFrame = null;
     this.token = null;
+    this.imageAccepted = false;
+    this.promptAccepted = false;
     this.setStatus("idle");
   }
 
@@ -390,6 +406,7 @@ export class ReactorClient implements WorldModelAdapter {
     await this.cleanupModel();
     this.currentMode = "fallback";
     this.activeFallbackAsset = asset;
+    this.frameCallback?.(null);
     this.setStatus("fallback");
 
     this.events.emit("fallback_triggered", {
@@ -401,3 +418,4 @@ export class ReactorClient implements WorldModelAdapter {
 }
 
 export const reactorClient = new ReactorClient();
+

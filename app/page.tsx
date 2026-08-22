@@ -49,8 +49,16 @@ export default function MemberADemoPage() {
     checkTokenRoute();
   }, []);
 
+  useEffect(() => {
+    return () => {
+      void reactorClient.reset();
+    };
+  }, []);
+
   const handleStartStream = async () => {
     setIsRewinding(false);
+    setCapturedFrame(null);
+    setLiveStream(null);
     setAmbientPrompt("Bedroom scene: smoke under closed exit door, dark high-stakes environment.");
     await reactorClient.start({
       referenceImage: "/references/bedroom-fire.jpg",
@@ -60,6 +68,8 @@ export default function MemberADemoPage() {
       onFrame: (frameObj: any) => {
         if (frameObj && frameObj.stream) {
           setLiveStream(frameObj.stream);
+        } else {
+          setLiveStream(null);
         }
       },
     });
@@ -68,12 +78,15 @@ export default function MemberADemoPage() {
   const handlePauseDecision = async () => {
     setIsRewinding(false);
     await reactorClient.pause();
-    setCapturedFrame(reactorClient.getCapturedFrame());
   };
 
   const handleApplyUnsafeChoice = async () => {
     setIsRewinding(false);
     setAmbientPrompt("Selected choice: Open warm door. Consequence: Heavy black smoke surges into room.");
+    if (reactorClient.getMode() === "fallback") {
+      await reactorClient.useFallback("/fallbacks/fire-hallway-unsafe.mp4");
+      return;
+    }
     await reactorClient.applyPrompt("Open door, heavy black smoke and heat fill the hallway");
     await reactorClient.resume();
   };
@@ -81,6 +94,10 @@ export default function MemberADemoPage() {
   const handleApplySafeChoice = async () => {
     setIsRewinding(false);
     setAmbientPrompt("Selected choice: Keep door closed. Consequence: Block smoke gap with towel, signal at window.");
+    if (reactorClient.getMode() === "fallback") {
+      await reactorClient.useFallback("/fallbacks/fire-shelter-safe.mp4");
+      return;
+    }
     await reactorClient.applyPrompt("Keep door closed, seal gap with wet towel, await rescue at window");
     await reactorClient.resume();
   };
@@ -96,6 +113,7 @@ export default function MemberADemoPage() {
 
   const handleTriggerFallback = async () => {
     setIsRewinding(false);
+    setLiveStream(null);
     await reactorClient.useFallback("/fallbacks/fire-bedroom-orient.mp4");
   };
 
@@ -133,10 +151,12 @@ export default function MemberADemoPage() {
           <WorldViewport
             status={status}
             fallbackAsset={activeAsset}
+            mode={mode}
             capturedFrameUrl={capturedFrame}
             isRewinding={isRewinding}
             ambientPrompt={ambientPrompt}
             liveStream={liveStream}
+            onCapturedFrame={setCapturedFrame}
           />
         </div>
 
@@ -234,3 +254,4 @@ export default function MemberADemoPage() {
     </main>
   );
 }
+

@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-export async function POST(req: NextRequest) {
+export async function POST() {
   const apiKey = process.env.REACTOR_API_KEY ? process.env.REACTOR_API_KEY.trim() : null;
   if (!apiKey) {
     return NextResponse.json(
@@ -13,9 +13,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const body = await req.json().catch(() => ({}));
-  const requestedModel = body.model || "lingbot-world-2";
-
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
@@ -27,7 +24,13 @@ export async function POST(req: NextRequest) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: requestedModel,
+        authorization_details: [
+          {
+            type: "session",
+            resources: { models: { match: ["reactor/lingbot-world-2"] } },
+            constraints: { max_sessions: 10 },
+          },
+        ],
       }),
       signal: controller.signal,
     });
@@ -37,11 +40,16 @@ export async function POST(req: NextRequest) {
     if (response.ok) {
       const data = await response.json();
       const token = data.jwt || data.token;
+      if (!token) {
+        return NextResponse.json(
+          { error: "INVALID_TOKEN_RESPONSE", message: "Reactor returned no session token.", mode: "fallback" },
+          { status: 502 }
+        );
+      }
       return NextResponse.json({
         token,
         expiresAt: data.expires_at ? data.expires_at * 1000 : Date.now() + 3600000,
-        endpoint: "wss://api.reactor.inc/v1/lingbot-world-2/stream",
-        model: requestedModel,
+        model: "lingbot-world-2",
         mode: "live",
       });
     }
@@ -78,3 +86,4 @@ export async function GET() {
     hasKey: Boolean(apiKey),
   });
 }
+
