@@ -14,6 +14,8 @@ import { initialPlayerState, playerReducer } from "@/lib/player/state-machine";
 import { reactorClient, type WorldModelAdapter } from "@/lib/reactor/client";
 import type { WorldModelStatus } from "@/lib/reactor/events";
 import type { ChoiceDefinition, GeneratedScenario } from "@/lib/scenario/types";
+import type { SessionResult } from "@/lib/scenario/types";
+import { scoreSession } from "@/lib/scenario/scoring";
 
 type ExperiencePlayerProps = {
   scenario?: GeneratedScenario;
@@ -47,6 +49,7 @@ export function ExperiencePlayer({
   const [liveStream, setLiveStream] = useState<MediaStream | null>(null);
   const [pending, setPending] = useState(false);
   const [alternativeStarted, setAlternativeStarted] = useState(false);
+  const [sessionResult, setSessionResult] = useState<SessionResult | null>(null);
   const [reducedMotion, setReducedMotion] = useState(false);
 
   useEffect(() => {
@@ -94,6 +97,7 @@ export function ExperiencePlayer({
 
   const startScenario = async () => {
     dispatch({ type: "START_SCENARIO", scenarioId: scenario.id });
+    setSessionResult(null);
     setPending(true);
     try {
       await startAdapter(scenario);
@@ -175,6 +179,19 @@ export function ExperiencePlayer({
     if (pending || player.current !== "transfer") return;
     setPending(true);
     dispatch({ type: "SUBMIT_TRANSFER", choiceId: choice.id });
+    const initialChoice = scenario.decision.choices.find((candidate) => candidate.id === player.initialChoiceId);
+    if (initialChoice && player.startedAt) {
+      setSessionResult(scoreSession({
+        sessionId: `${scenario.id}-${player.startedAt}`,
+        scenarioId: scenario.id,
+        initialChoice,
+        transferChoice: choice,
+        generationMode: modeOf(adapter),
+        generationValidated: modeOf(adapter) === "live",
+        startedAt: new Date(player.startedAt).toISOString(),
+        completedAt: new Date().toISOString(),
+      }));
+    }
     try {
       await adapter.pause();
     } finally {
@@ -186,6 +203,7 @@ export function ExperiencePlayer({
     setPending(true);
     await adapter.reset();
     dispatch({ type: "RESTART" });
+    setSessionResult(null);
     setStatus("idle");
     setMode("live");
     setLiveStream(null);
@@ -240,7 +258,7 @@ export function ExperiencePlayer({
       case "transfer":
         return <TransferCheck scenario={transferScenario} onSelect={(choice) => void submitTransfer(choice)} disabled={pending} />;
       case "result":
-        return <ResultView initialChoiceLabel={initialChoice?.label ?? "Not recorded"} transferChoiceLabel={transferChoice?.label ?? "Not recorded"} generationMode={mode} onRestart={() => void restart()} />;
+        return <ResultView initialChoiceLabel={initialChoice?.label ?? "Not recorded"} transferChoiceLabel={transferChoice?.label ?? "Not recorded"} generationMode={mode} sessionResult={sessionResult} onRestart={() => void restart()} />;
       case "error":
         return (
           <section role="alert" className="rounded-2xl border border-rose-400/40 bg-rose-950/90 p-6 shadow-2xl">

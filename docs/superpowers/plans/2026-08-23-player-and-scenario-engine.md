@@ -32,9 +32,9 @@
 
 ### Phase 2: Member C scenario engine
 
-- [ ] Add failing tests for parameter validation, prompt composition, pack invariants, scoring, and score eligibility.
-- [ ] Implement immutable structure-fire and hotel-transfer scenario packs.
-- [ ] Implement deterministic composition and validation helpers.
-- [ ] Implement transfer-success and improvement semantics.
-- [ ] Wire the player to consume the scenario engine without duplicating safety facts in UI code.
-- [ ] Run the full suite, typecheck, lint, and build; commit and publish `feat/scenario-engine`.
+- [x] Add failing tests for parameter validation, prompt composition, pack invariants, scoring, and score eligibility.
+- [x] Implement immutable structure-fire and hotel-transfer scenario packs.
+- [x] Implement deterministic composition and validation helpers.
+- [x] Implement transfer-success and improvement semantics.
+- [x] Wire the player to consume the scenario engine without duplicating safety facts in UI code.
+- [x] Run the full suite, typecheck, lint, and build; commit and publish `feat/scenario-engine`.

@@ -68,6 +68,16 @@ export type DisasterPack = {
   sourceReferences: SourceReference[];
 };
 
+export type ScenarioPack = DisasterPack & {
+  referenceImage: string;
+  reactorSeed: number;
+  basePrompt: string;
+  cues: ControlledCue[];
+  consequences: Record<string, ConsequenceDefinition>;
+  debrief: GeneratedScenario["debrief"];
+  transferScenarioId: string;
+};
+
 export type ControlledCue = {
   id: string;
   learnerCopy: string;
