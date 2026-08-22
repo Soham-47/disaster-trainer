@@ -11,6 +11,7 @@ interface WorldViewportProps {
   onVideoEnd?: () => void;
   className?: string;
   ambientPrompt?: string;
+  liveStream?: MediaStream | null;
 }
 
 export const WorldViewport: React.FC<WorldViewportProps> = ({
@@ -21,9 +22,13 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
   onVideoEnd,
   className = "",
   ambientPrompt = "",
+  liveStream,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const fallbackVideoRef = useRef<HTMLVideoElement>(null);
   const animFrameRef = useRef<number | null>(null);
+  const capturedForPauseRef = useRef<boolean>(false);
   const [localFrameUrl, setLocalFrameUrl] = useState<string | null>(capturedFrameUrl || null);
 
   useEffect(() => {
@@ -32,9 +37,28 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
     }
   }, [capturedFrameUrl]);
 
+  // Connect live stream to HTMLVideoElement when liveStream prop changes
+  useEffect(() => {
+    if (videoRef.current && liveStream) {
+      videoRef.current.srcObject = liveStream;
+      videoRef.current.play().catch((err) => {
+        console.warn("[WorldViewport] Live video play failed:", err);
+      });
+    }
+  }, [liveStream]);
+
+  // Reset captured flag when status changes out of paused
+  useEffect(() => {
+    if (status !== "paused") {
+      capturedForPauseRef.current = false;
+    }
+  }, [status]);
+
   // Determine active visual state from prompt content
-  const isUnsafeBranch = ambientPrompt.toLowerCase().includes("open") || ambientPrompt.toLowerCase().includes("hallway");
-  const isSafeBranch = ambientPrompt.toLowerCase().includes("keep door closed") || ambientPrompt.toLowerCase().includes("towel");
+  const isUnsafeBranch =
+    ambientPrompt.toLowerCase().includes("open") || ambientPrompt.toLowerCase().includes("hallway");
+  const isSafeBranch =
+    ambientPrompt.toLowerCase().includes("keep door closed") || ambientPrompt.toLowerCase().includes("towel");
 
   // 60fps Dynamic Atmospheric Renderer
   useEffect(() => {
@@ -50,8 +74,21 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
     canvas.height = height;
 
     // Particle arrays
-    let smokeParticles: Array<{ x: number; y: number; size: number; speedX: number; speedY: number; opacity: number }> = [];
-    let fireParticles: Array<{ x: number; y: number; size: number; speedY: number; color: string }> = [];
+    const smokeParticles: Array<{
+      x: number;
+      y: number;
+      size: number;
+      speedX: number;
+      speedY: number;
+      opacity: number;
+    }> = [];
+    const fireParticles: Array<{
+      x: number;
+      y: number;
+      size: number;
+      speedY: number;
+      color: string;
+    }> = [];
 
     // Initialize smoke
     for (let i = 0; i < 50; i++) {
@@ -76,7 +113,7 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
       });
     }
 
-    let startTime = Date.now();
+    const startTime = Date.now();
 
     const render = () => {
       const elapsed = (Date.now() - startTime) / 1000;
@@ -195,7 +232,14 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
       // Emergency Light Flashing
       const flash = Math.sin(elapsed * 6) > 0.4;
       if (flash && !isSafeBranch) {
-        const alarmGrad = ctx.createRadialGradient(doorX + doorWidth / 2, doorY - 30, 10, doorX + doorWidth / 2, doorY - 30, 600);
+        const alarmGrad = ctx.createRadialGradient(
+          doorX + doorWidth / 2,
+          doorY - 30,
+          10,
+          doorX + doorWidth / 2,
+          doorY - 30,
+          600
+        );
         alarmGrad.addColorStop(0, "rgba(239, 68, 68, 0.3)");
         alarmGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
         ctx.fillStyle = alarmGrad;
@@ -221,14 +265,13 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
         ctx.stroke();
       }
 
-      // Capture decision frame on pause
-      if (status === "paused") {
+      // Capture decision frame ONCE on pause transition to prevent infinite loops
+      if (status === "paused" && !capturedForPauseRef.current) {
+        capturedForPauseRef.current = true;
         try {
           const frame = canvas.toDataURL("image/jpeg", 0.85);
-          if (frame !== localFrameUrl) {
-            setLocalFrameUrl(frame);
-            reactorClient.setCapturedFrame(frame);
-          }
+          setLocalFrameUrl(frame);
+          reactorClient.setCapturedFrame(frame);
         } catch (e) {}
       }
 
@@ -244,6 +287,8 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
     };
   }, [ambientPrompt, status, isRewinding, isUnsafeBranch, isSafeBranch]);
 
+  const showFallbackVideo = status === "fallback" && fallbackAsset;
+
   return (
     <div
       className={`relative w-full h-full min-h-[480px] bg-neutral-950 overflow-hidden select-none flex items-center justify-center ${className}`}
@@ -251,12 +296,37 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
       {/* Background Radial Gradient */}
       <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-transparent to-neutral-950/70 z-10 pointer-events-none" />
 
-      {/* Atmospheric World Canvas */}
+      {/* Live Stream Video Element (WebRTC Track) */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 z-5 ${
+          liveStream && status === "generating" ? "opacity-100" : "opacity-0 pointer-events-none"
+        }`}
+      />
+
+      {/* Fallback Prepared Video Element */}
+      {showFallbackVideo && (
+        <video
+          ref={fallbackVideoRef}
+          src={fallbackAsset}
+          autoPlay
+          loop
+          playsInline
+          muted
+          onEnded={onVideoEnd}
+          className="absolute inset-0 w-full h-full object-cover z-5"
+        />
+      )}
+
+      {/* Atmospheric World Canvas (Active when no live video stream or during synthetic orient) */}
       <canvas
         ref={canvasRef}
         className={`w-full h-full object-cover transition-all duration-700 ${
-          status === "paused" || isRewinding ? "opacity-75 blur-xs scale-102" : "opacity-100 scale-100"
-        }`}
+          showFallbackVideo || liveStream ? "opacity-30" : "opacity-100"
+        } ${status === "paused" || isRewinding ? "opacity-75 blur-xs scale-102" : "scale-100"}`}
       />
 
       {/* Decision Snapshot Overlay Layer */}
@@ -293,7 +363,11 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
         <div className="absolute top-6 left-6 z-20 max-w-xl bg-neutral-900/90 backdrop-blur-md border border-neutral-800/80 rounded-xl px-4 py-2.5 text-xs text-neutral-300 shadow-2xl flex items-center gap-2.5">
           <span
             className={`w-2.5 h-2.5 rounded-full ${
-              isUnsafeBranch ? "bg-rose-500 animate-ping" : isSafeBranch ? "bg-emerald-400 animate-pulse" : "bg-amber-500 animate-pulse"
+              isUnsafeBranch
+                ? "bg-rose-500 animate-ping"
+                : isSafeBranch
+                ? "bg-emerald-400 animate-pulse"
+                : "bg-amber-500 animate-pulse"
             } shrink-0`}
           />
           <span className="font-mono text-neutral-400 uppercase tracking-widest text-[10px] shrink-0">

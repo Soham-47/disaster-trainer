@@ -1,3 +1,4 @@
+import { LingbotWorld2Model } from "@reactor-models/lingbot-world-2";
 import {
   ReactorEventEmitter,
   ReactorEventType,
@@ -37,7 +38,7 @@ export class ReactorClient implements WorldModelAdapter {
   private capturedDecisionFrame: string | null = null;
   private frameCallback?: (frame: unknown) => void;
   private timeoutTimer: NodeJS.Timeout | null = null;
-  private wsConnection: WebSocket | null = null;
+  private model: LingbotWorld2Model | null = null;
 
   // Timeout bounds (in ms) from project specification
   private readonly TIMEOUTS = {
@@ -69,7 +70,7 @@ export class ReactorClient implements WorldModelAdapter {
     return this.capturedDecisionFrame;
   }
 
-  public setCapturedFrame(frameUrl: string): void {
+  public setCapturedFrame(frameUrl: string | null): void {
     this.capturedDecisionFrame = frameUrl;
   }
 
@@ -112,18 +113,14 @@ export class ReactorClient implements WorldModelAdapter {
         fatal: false,
         timestamp: Date.now(),
       });
-      if (fallbackAsset) {
-        this.useFallback(fallbackAsset);
-      } else {
-        this.useFallback("/fallbacks/fire-bedroom-orient.mp4");
-      }
+      this.useFallback(fallbackAsset || "/fallbacks/fire-bedroom-orient.mp4");
     }, ms);
   }
 
   /**
-   * Request session token from Next.js server route POST /api/reactor-token
+   * Request session token from server route POST /api/reactor-token
    */
-  private async fetchToken(): Promise<string> {
+  private async fetchToken(): Promise<{ token: string; mode: "live" | "fallback" }> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.TIMEOUTS.TOKEN);
 
@@ -137,77 +134,29 @@ export class ReactorClient implements WorldModelAdapter {
 
       clearTimeout(timeoutId);
       if (!res.ok) {
-        throw new Error(`Token endpoint returned HTTP ${res.status}`);
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || `Token route returned HTTP ${res.status}`);
       }
       const data = await res.json();
-      this.token = data.token;
-      if (data.mode === "live") {
-        this.currentMode = "live";
+      if (data.mode !== "live" || !data.token) {
+        return { token: "", mode: "fallback" };
       }
-      return data.token;
+      this.token = data.token;
+      this.currentMode = "live";
+      return { token: data.token, mode: "live" };
     } catch (err: any) {
       clearTimeout(timeoutId);
-      throw new Error(`Failed token exchange: ${err.message || err}`);
+      throw new Error(`Token exchange failed: ${err.message || err}`);
     }
   }
 
   /**
-   * Establish Live WebSocket stream to LingBot World 2
-   */
-  private connectWebSocketStream(jwtToken: string): void {
-    if (typeof window === "undefined") return;
-
-    try {
-      const wsUrl = `wss://api.reactor.inc/v1/lingbot-world-2/stream?token=${encodeURIComponent(jwtToken)}`;
-      console.log("[ReactorClient] Connecting live stream to LingBot World 2 runner...");
-      const ws = new WebSocket(wsUrl);
-
-      ws.onopen = () => {
-        console.log("[ReactorClient] Connected to LingBot World 2 stream runner.");
-        // Send initial stream setup command
-        ws.send(JSON.stringify({
-          action: "initialize_session",
-          model: "lingbot-world-2",
-          prompt: this.currentPrompt,
-          seed: this.currentSeed,
-          reference_image: this.referenceImage,
-        }));
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-          if (message.event === "frame_chunk" && message.data) {
-            this.events.emit("chunk_complete", {
-              chunkIndex: message.chunk_index || 0,
-              durationMs: 100,
-              timestamp: Date.now(),
-            });
-            if (this.frameCallback) {
-              this.frameCallback(message.data);
-            }
-          }
-        } catch (e) {}
-      };
-
-      ws.onerror = (err) => {
-        console.warn("[ReactorClient] WebSocket stream info:", err);
-      };
-
-      ws.onclose = () => {
-        console.log("[ReactorClient] Stream session closed.");
-      };
-
-      this.wsConnection = ws;
-    } catch (err) {
-      console.warn("[ReactorClient] WebSocket connection deferred:", err);
-    }
-  }
-
-  /**
-   * Start generation workflow
+   * Start generation workflow using official LingBot World 2 SDK
    */
   public async start(input: WorldModelAdapterInput): Promise<void> {
+    // Reset previous connection if any
+    await this.cleanupModel();
+
     this.referenceImage = input.referenceImage;
     this.currentPrompt = input.prompt;
     this.currentSeed = input.seed;
@@ -218,110 +167,227 @@ export class ReactorClient implements WorldModelAdapter {
       this.setStatus("connecting");
       this.scheduleTimeout(this.TIMEOUTS.TOKEN, "token exchange", defaultFallback);
 
-      const jwt = await this.fetchToken();
+      const tokenResult = await this.fetchToken();
       this.clearTimeoutTimer();
 
-      // Connect real stream socket
-      if (jwt) {
-        this.connectWebSocketStream(jwt);
+      if (tokenResult.mode === "fallback" || !tokenResult.token) {
+        console.warn("[ReactorClient] Server token route returned fallback mode. Engaging local fallback.");
+        await this.useFallback(defaultFallback);
+        return;
       }
 
-      // Step 2: Upload / Set Reference Image
-      this.setStatus("uploading_image");
-      this.scheduleTimeout(this.TIMEOUTS.IMAGE, "image acceptance", defaultFallback);
+      // Initialize LingbotWorld2Model
+      this.model = new LingbotWorld2Model();
 
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      this.events.emit("image_accepted", {
-        referenceImage: this.referenceImage,
-        timestamp: Date.now(),
+      // Bind SDK events to application event emitter
+      this.model.onImageAccepted((msg) => {
+        this.events.emit("image_accepted", {
+          referenceImage: this.referenceImage,
+          timestamp: Date.now(),
+        });
       });
+
+      this.model.onPromptAccepted((msg) => {
+        this.events.emit("prompt_accepted", {
+          prompt: msg.prompt,
+          timestamp: Date.now(),
+        });
+      });
+
+      this.model.onConditionsReady((msg) => {
+        this.events.emit("conditions_ready", {
+          seed: this.currentSeed,
+          timestamp: Date.now(),
+        });
+      });
+
+      this.model.onGenerationStarted((msg) => {
+        this.clearTimeoutTimer();
+        this.setStatus("generating");
+        this.events.emit("generation_started", {
+          sessionId: `sess_${Date.now()}`,
+          mode: "live",
+          timestamp: Date.now(),
+        });
+      });
+
+      this.model.onChunkComplete((msg) => {
+        this.events.emit("chunk_complete", {
+          chunkIndex: msg.chunk_index,
+          durationMs: 100,
+          timestamp: Date.now(),
+        });
+      });
+
+      this.model.onGenerationPaused((msg) => {
+        this.clearTimeoutTimer();
+        this.setStatus("paused");
+        this.events.emit("generation_paused", {
+          capturedFrame: this.capturedDecisionFrame || undefined,
+          timestamp: Date.now(),
+        });
+      });
+
+      this.model.onGenerationResumed((msg) => {
+        this.clearTimeoutTimer();
+        this.setStatus("generating");
+        this.events.emit("generation_resumed", {
+          prompt: this.currentPrompt,
+          timestamp: Date.now(),
+        });
+      });
+
+      this.model.onCommandError((msg) => {
+        console.warn(`[ReactorClient] Command Error from Reactor SDK: ${msg.command} - ${msg.reason}`);
+        this.events.emit("command_error", {
+          code: msg.command,
+          message: msg.reason,
+          fatal: false,
+          timestamp: Date.now(),
+        });
+      });
+
+      this.model.onMainVideo((track, stream) => {
+        if (this.frameCallback) {
+          this.frameCallback({ track, stream });
+        }
+        this.events.emit("frame_ready", {
+          frameUrl: "main_video",
+          width: 1280,
+          height: 720,
+          timestamp: Date.now(),
+        });
+      });
+
+      this.model.on("error", (err: any) => {
+        console.warn("[ReactorClient] Transport/SDK Error:", err);
+        this.useFallback(defaultFallback);
+      });
+
+      // Connect SDK
+      this.scheduleTimeout(this.TIMEOUTS.CONNECT, "SDK connection", defaultFallback);
+      await this.model.connect(tokenResult.token);
       this.clearTimeoutTimer();
 
-      // Step 3: Set Prompt & Seed
+      // Step 2: Upload Reference Image
+      this.setStatus("uploading_image");
+      this.scheduleTimeout(this.TIMEOUTS.IMAGE, "image upload & acceptance", defaultFallback);
+
+      let imageBlob: Blob;
+      if (this.referenceImage.startsWith("data:")) {
+        const res = await fetch(this.referenceImage);
+        imageBlob = await res.blob();
+      } else {
+        const res = await fetch(this.referenceImage);
+        if (!res.ok) {
+          throw new Error(`Failed to load reference image asset: ${this.referenceImage}`);
+        }
+        imageBlob = await res.blob();
+      }
+
+      const fileRef = await this.model.uploadFile(imageBlob, { name: "reference.jpg" });
+      await this.model.setImage({ image: fileRef });
+
+      // Step 3: Set Seed & Prompt
       this.setStatus("ready");
       this.scheduleTimeout(this.TIMEOUTS.PROMPT, "prompt acceptance", defaultFallback);
 
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      this.events.emit("prompt_accepted", {
-        prompt: this.currentPrompt,
-        timestamp: Date.now(),
-      });
-      this.events.emit("conditions_ready", {
-        seed: this.currentSeed,
-        timestamp: Date.now(),
-      });
-      this.clearTimeoutTimer();
+      await this.model.setSeed({ seed: this.currentSeed });
+      await this.model.setPrompt({ prompt: this.currentPrompt });
 
       // Step 4: Begin Generation
-      this.setStatus("generating");
       this.scheduleTimeout(this.TIMEOUTS.FIRST_FRAME, "first frame generation", defaultFallback);
-
-      await new Promise((resolve) => setTimeout(resolve, 400));
-      this.clearTimeoutTimer();
-
-      this.events.emit("generation_started", {
-        sessionId: `sess_${Date.now()}`,
-        mode: this.currentMode,
-        timestamp: Date.now(),
-      });
+      await this.model.start();
     } catch (err: any) {
-      console.warn("[ReactorClient] Startup failed. Fallback engaged:", err.message);
+      console.warn("[ReactorClient] Live startup failed. Fallback engaged:", err.message || err);
       await this.useFallback(defaultFallback);
     }
   }
 
   public async pause(): Promise<void> {
     this.clearTimeoutTimer();
-    this.setStatus("paused");
-    if (this.wsConnection && this.wsConnection.readyState === WebSocket.OPEN) {
-      this.wsConnection.send(JSON.stringify({ action: "pause" }));
+    if (this.currentMode === "live" && this.model) {
+      try {
+        await this.model.pause();
+      } catch (err) {
+        this.setStatus("paused");
+        this.events.emit("generation_paused", {
+          capturedFrame: this.capturedDecisionFrame || undefined,
+          timestamp: Date.now(),
+        });
+      }
+    } else {
+      this.setStatus("paused");
+      this.events.emit("generation_paused", {
+        capturedFrame: this.capturedDecisionFrame || undefined,
+        timestamp: Date.now(),
+      });
     }
-    this.events.emit("generation_paused", {
-      capturedFrame: this.capturedDecisionFrame || undefined,
-      timestamp: Date.now(),
-    });
   }
 
   public async resume(): Promise<void> {
-    this.setStatus("generating");
-    if (this.wsConnection && this.wsConnection.readyState === WebSocket.OPEN) {
-      this.wsConnection.send(JSON.stringify({ action: "resume", prompt: this.currentPrompt }));
+    if (this.currentMode === "live" && this.model) {
+      try {
+        await this.model.resume();
+      } catch (err) {
+        this.setStatus("generating");
+        this.events.emit("generation_resumed", {
+          prompt: this.currentPrompt,
+          timestamp: Date.now(),
+        });
+      }
+    } else {
+      this.setStatus("generating");
+      this.events.emit("generation_resumed", {
+        prompt: this.currentPrompt,
+        timestamp: Date.now(),
+      });
     }
-    this.events.emit("generation_resumed", {
-      prompt: this.currentPrompt,
-      timestamp: Date.now(),
-    });
   }
 
   public async applyPrompt(prompt: string): Promise<void> {
     this.currentPrompt = prompt;
-    if (this.wsConnection && this.wsConnection.readyState === WebSocket.OPEN) {
-      this.wsConnection.send(JSON.stringify({ action: "set_prompt", prompt }));
+    if (this.currentMode === "live" && this.model) {
+      this.scheduleTimeout(
+        this.TIMEOUTS.BRANCH,
+        "branch prompt switch",
+        this.activeFallbackAsset || "/fallbacks/fire-bedroom-orient.mp4"
+      );
+      await this.model.setPrompt({ prompt });
+    } else {
+      this.events.emit("prompt_accepted", {
+        prompt,
+        timestamp: Date.now(),
+      });
     }
+  }
 
-    this.scheduleTimeout(this.TIMEOUTS.BRANCH, "branch prompt switch", this.activeFallbackAsset || "/fallbacks/fire-bedroom-orient.mp4");
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    this.clearTimeoutTimer();
-
-    this.events.emit("prompt_accepted", {
-      prompt,
-      timestamp: Date.now(),
-    });
+  private async cleanupModel(): Promise<void> {
+    if (this.model) {
+      try {
+        await this.model.reset();
+        await this.model.disconnect();
+      } catch (e) {}
+      this.model = null;
+    }
   }
 
   public async reset(): Promise<void> {
     this.clearTimeoutTimer();
-    if (this.wsConnection) {
-      this.wsConnection.close();
-      this.wsConnection = null;
-    }
+    await this.cleanupModel();
     this.currentMode = "live";
     this.activeFallbackAsset = null;
+    this.currentPrompt = "";
+    this.currentSeed = 42;
+    this.referenceImage = "";
+    this.capturedDecisionFrame = null;
+    this.token = null;
     this.setStatus("idle");
   }
 
   public async useFallback(asset: string): Promise<void> {
     this.clearTimeoutTimer();
+    await this.cleanupModel();
     this.currentMode = "fallback";
     this.activeFallbackAsset = asset;
     this.setStatus("fallback");

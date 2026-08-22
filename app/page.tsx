@@ -17,6 +17,7 @@ export default function MemberADemoPage() {
     "A 4th floor apartment bedroom, smoke drifting under closed door, emergency alarm sounding."
   );
   const [tokenInfo, setTokenInfo] = useState<any>(null);
+  const [liveStream, setLiveStream] = useState<MediaStream | null>(null);
 
   // Subscribe to status changes
   useEffect(() => {
@@ -56,6 +57,11 @@ export default function MemberADemoPage() {
       prompt: "Bedroom scene: smoke under closed exit door, dark high-stakes environment.",
       seed: 42069,
       fallbackAsset: "/fallbacks/fire-bedroom-orient.mp4",
+      onFrame: (frameObj: any) => {
+        if (frameObj && frameObj.stream) {
+          setLiveStream(frameObj.stream);
+        }
+      },
     });
   };
 
@@ -130,6 +136,7 @@ export default function MemberADemoPage() {
             capturedFrameUrl={capturedFrame}
             isRewinding={isRewinding}
             ambientPrompt={ambientPrompt}
+            liveStream={liveStream}
           />
         </div>
 
@@ -204,7 +211,7 @@ export default function MemberADemoPage() {
                 <div className="flex justify-between">
                   <span>REACTOR_API_KEY Configured:</span>
                   <span className={tokenInfo.hasKey ? "text-emerald-400" : "text-rose-400"}>
-                    {tokenInfo.hasKey ? `Yes (${tokenInfo.keyPrefix})` : "No"}
+                    {tokenInfo.hasKey ? "Yes" : "No"}
                   </span>
                 </div>
                 <div className="flex justify-between">

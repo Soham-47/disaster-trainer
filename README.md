@@ -68,11 +68,15 @@ Next.js / React / TypeScript
   └── Approved fallback media
 ```
 
-No code has been added yet. The complete implementation specification is maintained in the team’s local working copy of `PLAN.md`.
+The Reactor adapter implementation is fully integrated and tested. It uses the official `@reactor-models/lingbot-world-2` SDK, server-side authentication, fail-closed fallback management, and event-driven video rendering.
 
-## Repository status
+## Testing & Quality Assurance
 
-This public repository intentionally contains the README only until implementation begins.
+- `npm test`: Runs Vitest suite covering adapter status flow, token failures, fallback triggering, event delivery, and asset existence.
+- `npm run typecheck`: TypeScript compilation check.
+- `npm run lint`: ESLint check using Next.js core web vitals configuration.
+- `npm run build`: Production build.
+
 
 ## License
 
