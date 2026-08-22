@@ -12,6 +12,8 @@ interface WorldViewportProps {
   className?: string;
   ambientPrompt?: string;
   liveStream?: MediaStream | null;
+  mode?: "live" | "fallback";
+  onCapturedFrame?: (frameUrl: string) => void;
 }
 
 export const WorldViewport: React.FC<WorldViewportProps> = ({
@@ -23,6 +25,8 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
   className = "",
   ambientPrompt = "",
   liveStream,
+  mode = "live",
+  onCapturedFrame,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -34,6 +38,8 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
   useEffect(() => {
     if (capturedFrameUrl) {
       setLocalFrameUrl(capturedFrameUrl);
+    } else {
+      setLocalFrameUrl(null);
     }
   }, [capturedFrameUrl]);
 
@@ -53,6 +59,46 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
       capturedForPauseRef.current = false;
     }
   }, [status]);
+
+  // Capture the last actual model frame when possible. The video element keeps
+  // its last frame after the SDK pauses, so the learner rewinds to real model
+  // context rather than the decorative canvas.
+  useEffect(() => {
+    if (status !== "paused" || capturedForPauseRef.current) return;
+
+    const captureFrame = () => {
+      if (capturedForPauseRef.current) return;
+
+      const video = mode === "live" ? videoRef.current : fallbackVideoRef.current;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const captureCanvas = document.createElement("canvas");
+      const sourceVideoReady = Boolean(video && video.readyState >= 2 && video.videoWidth > 0);
+      captureCanvas.width = sourceVideoReady ? video!.videoWidth : canvas.width;
+      captureCanvas.height = sourceVideoReady ? video!.videoHeight : canvas.height;
+
+      try {
+        const context = captureCanvas.getContext("2d");
+        if (!context) return;
+        if (sourceVideoReady) {
+          context.drawImage(video!, 0, 0, captureCanvas.width, captureCanvas.height);
+        } else {
+          context.drawImage(canvas, 0, 0, captureCanvas.width, captureCanvas.height);
+        }
+        const frame = captureCanvas.toDataURL("image/jpeg", 0.85);
+        capturedForPauseRef.current = true;
+        setLocalFrameUrl(frame);
+        reactorClient.setCapturedFrame(frame);
+        onCapturedFrame?.(frame);
+      } catch (error) {
+        console.warn("[WorldViewport] Decision frame capture failed:", error);
+      }
+    };
+
+    const frameId = requestAnimationFrame(captureFrame);
+    return () => cancelAnimationFrame(frameId);
+  }, [status, liveStream, mode, onCapturedFrame]);
 
   // Determine active visual state from prompt content
   const isUnsafeBranch =
@@ -265,16 +311,6 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
         ctx.stroke();
       }
 
-      // Capture decision frame ONCE on pause transition to prevent infinite loops
-      if (status === "paused" && !capturedForPauseRef.current) {
-        capturedForPauseRef.current = true;
-        try {
-          const frame = canvas.toDataURL("image/jpeg", 0.85);
-          setLocalFrameUrl(frame);
-          reactorClient.setCapturedFrame(frame);
-        } catch (e) {}
-      }
-
       animFrameRef.current = requestAnimationFrame(render);
     };
 
@@ -287,7 +323,7 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
     };
   }, [ambientPrompt, status, isRewinding, isUnsafeBranch, isSafeBranch]);
 
-  const showFallbackVideo = status === "fallback" && fallbackAsset;
+  const showFallbackVideo = mode === "fallback" && Boolean(fallbackAsset);
 
   return (
     <div
@@ -302,8 +338,10 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
         autoPlay
         playsInline
         muted
-        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 z-5 ${
-          liveStream && status === "generating" ? "opacity-100" : "opacity-0 pointer-events-none"
+        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 z-10 ${
+          mode === "live" && liveStream && (status === "generating" || status === "paused")
+            ? "opacity-100"
+            : "opacity-0 pointer-events-none"
         }`}
       />
 
@@ -317,22 +355,26 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
           playsInline
           muted
           onEnded={onVideoEnd}
-          className="absolute inset-0 w-full h-full object-cover z-5"
+          className="absolute inset-0 w-full h-full object-cover z-10"
         />
       )}
 
       {/* Atmospheric World Canvas (Active when no live video stream or during synthetic orient) */}
       <canvas
         ref={canvasRef}
-        className={`w-full h-full object-cover transition-all duration-700 ${
-          showFallbackVideo || liveStream ? "opacity-30" : "opacity-100"
-        } ${status === "paused" || isRewinding ? "opacity-75 blur-xs scale-102" : "scale-100"}`}
+        className={`absolute inset-0 w-full h-full object-cover transition-all duration-700 ${
+          showFallbackVideo || (mode === "live" && liveStream)
+            ? "opacity-0"
+            : status === "paused"
+            ? "opacity-75"
+            : "opacity-100"
+        } ${status === "paused" || isRewinding ? "blur-sm scale-[1.02]" : "scale-100"}`}
       />
 
       {/* Decision Snapshot Overlay Layer */}
       {(status === "paused" || localFrameUrl) && status !== "generating" && (
         <div
-          className={`absolute inset-0 z-15 transition-opacity duration-500 pointer-events-none ${
+          className={`absolute inset-0 z-30 transition-opacity duration-500 pointer-events-none ${
             isRewinding ? "opacity-90 animate-pulse" : "opacity-80"
           }`}
         >
@@ -350,7 +392,7 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
 
       {/* Rewind Banner */}
       {isRewinding && (
-        <div className="absolute inset-0 z-25 pointer-events-none flex flex-col items-center justify-center bg-amber-950/40 backdrop-blur-xs">
+        <div className="absolute inset-0 z-40 pointer-events-none flex flex-col items-center justify-center bg-amber-950/40 backdrop-blur-sm">
           <div className="text-amber-300 font-mono text-xs tracking-widest uppercase mb-2 animate-pulse bg-amber-950/90 px-4 py-1.5 rounded-full border border-amber-500/40 shadow-2xl">
             ↺ Rewinding Time & Context...
           </div>
