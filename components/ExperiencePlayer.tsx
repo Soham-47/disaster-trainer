@@ -16,12 +16,15 @@ import type { WorldModelStatus } from "@/lib/reactor/events";
 import type { ChoiceDefinition, GeneratedScenario } from "@/lib/scenario/types";
 import type { SessionResult } from "@/lib/scenario/types";
 import { scoreSession } from "@/lib/scenario/scoring";
+import { buildWorldModelPrompt, normalizeScenarioBrief } from "@/lib/scenario/prompt";
 
 type ExperiencePlayerProps = {
   scenario?: GeneratedScenario;
   transferScenario?: GeneratedScenario;
   adapter?: WorldModelAdapter;
 };
+
+type VisualBranch = "orient" | "safe" | "unsafe";
 
 function modeOf(adapter: WorldModelAdapter): "live" | "fallback" {
   const candidate = adapter as WorldModelAdapter & { getMode?: () => "live" | "fallback" };
@@ -47,6 +50,8 @@ export function ExperiencePlayer({
   const [ambientPrompt, setAmbientPrompt] = useState(scenario.basePrompt);
   const [capturedFrame, setCapturedFrame] = useState<string | null>(null);
   const [liveStream, setLiveStream] = useState<MediaStream | null>(null);
+  const [scenarioBrief, setScenarioBrief] = useState("");
+  const [visualBranch, setVisualBranch] = useState<VisualBranch>("orient");
   const [pending, setPending] = useState(false);
   const [alternativeStarted, setAlternativeStarted] = useState(false);
   const [sessionResult, setSessionResult] = useState<SessionResult | null>(null);
@@ -69,24 +74,37 @@ export function ExperiencePlayer({
     return () => media.removeEventListener?.("change", update);
   }, []);
 
-  useEffect(() => () => {
-    void adapter.reset();
-  }, [adapter]);
-
   const streamFrame = useCallback((frame: unknown) => {
-    const liveFrame = frame as { stream?: MediaStream } | null;
-    setLiveStream(liveFrame?.stream ?? null);
+    const liveFrame = frame as { stream?: MediaStream; track?: MediaStreamTrack } | null;
+    const nextStream = liveFrame?.stream ?? (
+      liveFrame?.track && typeof MediaStream !== "undefined"
+        ? new MediaStream([liveFrame.track])
+        : null
+    );
+
+    setLiveStream((previousStream) => {
+      if (previousStream === nextStream) return previousStream;
+      previousStream?.getTracks().forEach((track) => track.stop());
+      return nextStream;
+    });
   }, []);
 
-  const startAdapter = useCallback(async (nextScenario: GeneratedScenario) => {
-    setAmbientPrompt(nextScenario.basePrompt);
+  useEffect(() => () => {
+    streamFrame(null);
+    void adapter.reset();
+  }, [adapter, streamFrame]);
+
+  const startAdapter = useCallback(async (nextScenario: GeneratedScenario, brief: string) => {
+    const worldPrompt = buildWorldModelPrompt(nextScenario.basePrompt, brief);
+    setAmbientPrompt(worldPrompt);
+    setVisualBranch("orient");
     setCapturedFrame(null);
     setAlternativeStarted(false);
     const orientFallback = nextScenario.consequences[nextScenario.decision.choices[0].consequenceStateId]?.fallbackAsset ?? "/fallbacks/fire-bedroom-orient.mp4";
     setActiveAsset(orientFallback);
     await adapter.start({
       referenceImage: nextScenario.referenceImage,
-      prompt: nextScenario.basePrompt,
+      prompt: worldPrompt,
       seed: nextScenario.reactorSeed,
       fallbackAsset: orientFallback,
       onFrame: streamFrame,
@@ -95,12 +113,14 @@ export function ExperiencePlayer({
     setMode(modeOf(adapter));
   }, [adapter, streamFrame]);
 
-  const startScenario = async () => {
+  const startScenario = async (brief: string) => {
+    const normalizedBrief = normalizeScenarioBrief(brief);
+    setScenarioBrief(normalizedBrief);
     dispatch({ type: "START_SCENARIO", scenarioId: scenario.id });
     setSessionResult(null);
     setPending(true);
     try {
-      await startAdapter(scenario);
+      await startAdapter(scenario, normalizedBrief);
     } catch (error) {
       dispatch({ type: "FAIL", error: error instanceof Error ? error.message : "Unable to start scenario" });
     } finally {
@@ -113,10 +133,12 @@ export function ExperiencePlayer({
     setPending(true);
     dispatch({ type: "SELECT_CHOICE", choiceId: choice.id });
     const consequence = scenario.consequences[choice.consequenceStateId];
-    setAmbientPrompt(consequence.prompt);
+    const consequencePrompt = buildWorldModelPrompt(consequence.prompt, scenarioBrief);
+    setVisualBranch(choice.safetyClass === "unsafe" ? "unsafe" : "safe");
+    setAmbientPrompt(consequencePrompt);
     setActiveAsset(consequence.fallbackAsset);
     try {
-      await adapter.applyPrompt(consequence.prompt);
+      await adapter.applyPrompt(consequencePrompt);
       await adapter.resume();
     } catch (error) {
       dispatch({ type: "FAIL", error: error instanceof Error ? error.message : "Unable to play consequence" });
@@ -150,10 +172,12 @@ export function ExperiencePlayer({
     if (pending || !alternativeChoice) return;
     setPending(true);
     const consequence = scenario.consequences[alternativeChoice.consequenceStateId];
-    setAmbientPrompt(consequence.prompt);
+    const consequencePrompt = buildWorldModelPrompt(consequence.prompt, scenarioBrief);
+    setVisualBranch(alternativeChoice.safetyClass === "unsafe" ? "unsafe" : "safe");
+    setAmbientPrompt(consequencePrompt);
     setActiveAsset(consequence.fallbackAsset);
     try {
-      await adapter.applyPrompt(consequence.prompt);
+      await adapter.applyPrompt(consequencePrompt);
       await adapter.resume();
       setAlternativeStarted(true);
     } catch (error) {
@@ -167,7 +191,7 @@ export function ExperiencePlayer({
     setPending(true);
     dispatch({ type: "DEBRIEF_NEXT" });
     try {
-      await startAdapter(transferScenario);
+      await startAdapter(transferScenario, scenarioBrief);
     } catch (error) {
       dispatch({ type: "FAIL", error: error instanceof Error ? error.message : "Unable to start transfer" });
     } finally {
@@ -206,9 +230,11 @@ export function ExperiencePlayer({
     setSessionResult(null);
     setStatus("idle");
     setMode("live");
-    setLiveStream(null);
+    setVisualBranch("orient");
+    streamFrame(null);
     setCapturedFrame(null);
     setAmbientPrompt(scenario.basePrompt);
+    setScenarioBrief("");
     setPending(false);
   };
 
@@ -217,7 +243,7 @@ export function ExperiencePlayer({
   const statePanel = (() => {
     switch (player.current) {
       case "entry":
-        return <EntryScreen onStart={() => void startScenario()} />;
+        return <EntryScreen onStart={(brief) => void startScenario(brief)} disabled={pending} />;
       case "orient":
         return (
           <section className="rounded-2xl border border-neutral-800 bg-neutral-950/90 p-5 shadow-2xl">
@@ -293,6 +319,7 @@ export function ExperiencePlayer({
               capturedFrameUrl={capturedFrame}
               isRewinding={player.current === "rewind"}
               ambientPrompt={ambientPrompt}
+              visualBranch={visualBranch}
               liveStream={liveStream}
               onCapturedFrame={setCapturedFrame}
             />

@@ -11,6 +11,7 @@ interface WorldViewportProps {
   onVideoEnd?: () => void;
   className?: string;
   ambientPrompt?: string;
+  visualBranch?: "orient" | "safe" | "unsafe";
   liveStream?: MediaStream | null;
   mode?: "live" | "fallback";
   onCapturedFrame?: (frameUrl: string) => void;
@@ -24,6 +25,7 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
   onVideoEnd,
   className = "",
   ambientPrompt = "",
+  visualBranch = "orient",
   liveStream,
   mode = "live",
   onCapturedFrame,
@@ -34,6 +36,11 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
   const animFrameRef = useRef<number | null>(null);
   const capturedForPauseRef = useRef<boolean>(false);
   const [localFrameUrl, setLocalFrameUrl] = useState<string | null>(capturedFrameUrl || null);
+  const [liveVideoReady, setLiveVideoReady] = useState(false);
+  const [pageVisible, setPageVisible] = useState(true);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const showFallbackVideo = mode === "fallback" && Boolean(fallbackAsset);
+  const liveVideoVisible = mode === "live" && Boolean(liveStream) && liveVideoReady;
 
   useEffect(() => {
     if (capturedFrameUrl) {
@@ -43,15 +50,41 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
     }
   }, [capturedFrameUrl]);
 
-  // Connect live stream to HTMLVideoElement when liveStream prop changes
+  // Connect the model's WebRTC stream to the first-person video element.
   useEffect(() => {
-    if (videoRef.current && liveStream) {
-      videoRef.current.srcObject = liveStream;
-      videoRef.current.play().catch((err) => {
-        console.warn("[WorldViewport] Live video play failed:", err);
-      });
-    }
+    const video = videoRef.current;
+    if (!video) return;
+
+    setLiveVideoReady(false);
+    video.srcObject = liveStream ?? null;
+    if (!liveStream) return;
+
+    const markReady = () => setLiveVideoReady(true);
+    video.addEventListener("loadeddata", markReady);
+    video.addEventListener("canplay", markReady);
+    video.play().catch((err) => {
+      console.warn("[WorldViewport] Live video play failed:", err);
+    });
+
+    return () => {
+      video.removeEventListener("loadeddata", markReady);
+      video.removeEventListener("canplay", markReady);
+    };
   }, [liveStream]);
+
+  useEffect(() => {
+    const updateVisibility = () => setPageVisible(document.visibilityState === "visible");
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const updateMotion = () => setReducedMotion(media.matches);
+    updateVisibility();
+    updateMotion();
+    document.addEventListener("visibilitychange", updateVisibility);
+    media.addEventListener?.("change", updateMotion);
+    return () => {
+      document.removeEventListener("visibilitychange", updateVisibility);
+      media.removeEventListener?.("change", updateMotion);
+    };
+  }, []);
 
   // Reset captured flag when status changes out of paused
   useEffect(() => {
@@ -101,13 +134,13 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
   }, [status, liveStream, mode, onCapturedFrame]);
 
   // Determine active visual state from prompt content
-  const isUnsafeBranch =
-    ambientPrompt.toLowerCase().includes("open") || ambientPrompt.toLowerCase().includes("hallway");
-  const isSafeBranch =
-    ambientPrompt.toLowerCase().includes("keep door closed") || ambientPrompt.toLowerCase().includes("towel");
+  const isUnsafeBranch = visualBranch === "unsafe";
+  const isSafeBranch = visualBranch === "safe";
 
   // 60fps Dynamic Atmospheric Renderer
   useEffect(() => {
+    if (showFallbackVideo || liveVideoVisible || !pageVisible) return;
+
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -311,7 +344,9 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
         ctx.stroke();
       }
 
-      animFrameRef.current = requestAnimationFrame(render);
+      if (!reducedMotion) {
+        animFrameRef.current = requestAnimationFrame(render);
+      }
     };
 
     render();
@@ -321,9 +356,7 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
         cancelAnimationFrame(animFrameRef.current);
       }
     };
-  }, [ambientPrompt, status, isRewinding, isUnsafeBranch, isSafeBranch]);
-
-  const showFallbackVideo = mode === "fallback" && Boolean(fallbackAsset);
+  }, [status, isRewinding, isUnsafeBranch, isSafeBranch, liveVideoVisible, pageVisible, reducedMotion, showFallbackVideo]);
 
   return (
     <div
@@ -338,8 +371,9 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
         autoPlay
         playsInline
         muted
+        onError={() => setLiveVideoReady(false)}
         className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 z-10 ${
-          mode === "live" && liveStream && (status === "generating" || status === "paused")
+          liveVideoVisible && (status === "generating" || status === "paused")
             ? "opacity-100"
             : "opacity-0 pointer-events-none"
         }`}
@@ -363,7 +397,7 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
       <canvas
         ref={canvasRef}
         className={`absolute inset-0 w-full h-full object-cover transition-all duration-700 ${
-          showFallbackVideo || (mode === "live" && liveStream)
+          showFallbackVideo || liveVideoVisible
             ? "opacity-0"
             : status === "paused"
             ? "opacity-75"
