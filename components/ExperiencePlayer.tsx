@@ -36,6 +36,11 @@ function fallbackAssetOf(adapter: WorldModelAdapter, fallback: string): string {
   return candidate.getActiveFallbackAsset?.() ?? fallback;
 }
 
+function fallbackReasonOf(adapter: WorldModelAdapter): string | null {
+  const candidate = adapter as WorldModelAdapter & { getFallbackReason?: () => string | null };
+  return candidate.getFallbackReason?.() ?? null;
+}
+
 export function ExperiencePlayer({
   scenario = demoScenario,
   transferScenario = demoScenario,
@@ -46,6 +51,7 @@ export function ExperiencePlayer({
     (adapter as WorldModelAdapter & { getStatus?: () => WorldModelStatus }).getStatus?.() ?? "idle"
   );
   const [mode, setMode] = useState<"live" | "fallback">(modeOf(adapter));
+  const [fallbackReason, setFallbackReason] = useState<string | null>(fallbackReasonOf(adapter));
   const [activeAsset, setActiveAsset] = useState(scenario.orientFallbackAsset);
   const [ambientPrompt, setAmbientPrompt] = useState(scenario.basePrompt);
   const [capturedFrame, setCapturedFrame] = useState<string | null>(null);
@@ -62,6 +68,7 @@ export function ExperiencePlayer({
       setStatus(nextStatus);
       setMode(modeOf(adapter));
       setActiveAsset(fallbackAssetOf(adapter, activeAsset));
+      setFallbackReason(fallbackReasonOf(adapter));
     });
     return unsubscribe;
   }, [adapter, activeAsset]);
@@ -230,6 +237,7 @@ export function ExperiencePlayer({
     setSessionResult(null);
     setStatus("idle");
     setMode("live");
+    setFallbackReason(null);
     setVisualBranch("orient");
     streamFrame(null);
     setCapturedFrame(null);
@@ -304,7 +312,12 @@ export function ExperiencePlayer({
           <p className="text-xs font-mono uppercase tracking-[0.3em] text-amber-300">Counterfactual Disaster Trainer</p>
           <p className="mt-1 text-sm text-neutral-400">Open-ended situations · constrained decisions · controlled safety truth</p>
         </div>
-        <GenerationStatus status={status} mode={mode} modelName="LingBot World 2" fallbackReason={mode === "fallback" ? "Prepared continuation" : null} />
+        <GenerationStatus
+          status={status}
+          mode={mode}
+          modelName="LingBot World 2"
+          fallbackReason={mode === "fallback" ? fallbackReason ?? "Prepared continuation" : null}
+        />
       </header>
 
       {player.current === "entry" ? (

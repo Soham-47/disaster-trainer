@@ -16,6 +16,16 @@ export type WorldModelAdapterInput = {
   onFrame?: (frame: unknown) => void;
 };
 
+/** Remote session setup and first-frame generation can outlive a local UI request. */
+export const REACTOR_TIMEOUTS = {
+  TOKEN: 15_000,
+  CONNECT: 60_000,
+  IMAGE: 20_000,
+  PROMPT: 15_000,
+  FIRST_FRAME: 60_000,
+  BRANCH: 20_000,
+} as const;
+
 export type WorldModelAdapter = {
   start(input: WorldModelAdapterInput): Promise<void>;
   pause(): Promise<void>;
@@ -38,19 +48,10 @@ export class ReactorClient implements WorldModelAdapter {
   private capturedDecisionFrame: string | null = null;
   private frameCallback?: (frame: unknown) => void;
   private timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+  private fallbackReason: string | null = null;
   private model: LingbotWorld2Model | null = null;
   private imageAccepted = false;
   private promptAccepted = false;
-
-  // Timeout bounds (in ms) from project specification
-  private readonly TIMEOUTS = {
-    TOKEN: 8000,
-    CONNECT: 10000,
-    IMAGE: 10000,
-    PROMPT: 8000,
-    FIRST_FRAME: 15000,
-    BRANCH: 8000,
-  };
 
   constructor() {
     this.setStatus("idle");
@@ -66,6 +67,10 @@ export class ReactorClient implements WorldModelAdapter {
 
   public getActiveFallbackAsset(): string | null {
     return this.activeFallbackAsset;
+  }
+
+  public getFallbackReason(): string | null {
+    return this.fallbackReason;
   }
 
   public getCapturedFrame(): string | null {
@@ -108,14 +113,16 @@ export class ReactorClient implements WorldModelAdapter {
   ): void {
     this.clearTimeoutTimer();
     this.timeoutTimer = setTimeout(() => {
-      console.warn(`[ReactorClient] Timeout hit (${reason}). Transitioning to fallback closed state.`);
+      const timeoutReason = `Timed out waiting for ${reason}`;
+      this.fallbackReason = timeoutReason;
+      console.warn(`[ReactorClient] ${timeoutReason}. Transitioning to fallback closed state.`);
       this.events.emit("command_error", {
         code: "TIMEOUT",
-        message: `Timeout waiting for ${reason}`,
+        message: timeoutReason,
         fatal: false,
         timestamp: Date.now(),
       });
-      this.useFallback(fallbackAsset || "/fallbacks/fire-bedroom-orient.mp4");
+      void this.useFallback(fallbackAsset || "/fallbacks/fire-bedroom-orient.mp4", timeoutReason);
     }, ms);
   }
 
@@ -124,7 +131,7 @@ export class ReactorClient implements WorldModelAdapter {
    */
   private async fetchToken(): Promise<{ token: string; mode: "live" | "fallback" }> {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.TIMEOUTS.TOKEN);
+    const timeoutId = setTimeout(() => controller.abort(), REACTOR_TIMEOUTS.TOKEN);
 
     try {
       const res = await fetch("/api/reactor-token", {
@@ -167,18 +174,19 @@ export class ReactorClient implements WorldModelAdapter {
     this.currentPrompt = input.prompt;
     this.currentSeed = input.seed;
     this.frameCallback = input.onFrame;
+    this.fallbackReason = null;
     const defaultFallback = input.fallbackAsset || "/fallbacks/fire-bedroom-orient.mp4";
 
     try {
       this.setStatus("connecting");
-      this.scheduleTimeout(this.TIMEOUTS.TOKEN, "token exchange", defaultFallback);
+      this.scheduleTimeout(REACTOR_TIMEOUTS.TOKEN, "token exchange", defaultFallback);
 
       const tokenResult = await this.fetchToken();
       this.clearTimeoutTimer();
 
       if (tokenResult.mode === "fallback" || !tokenResult.token) {
         console.warn("[ReactorClient] Server token route returned fallback mode. Engaging local fallback.");
-        await this.useFallback(defaultFallback);
+        await this.useFallback(defaultFallback, "Token route returned fallback mode");
         return;
       }
 
@@ -262,7 +270,7 @@ export class ReactorClient implements WorldModelAdapter {
           fatal: true,
           timestamp: Date.now(),
         });
-        void this.useFallback(defaultFallback);
+        void this.useFallback(defaultFallback, `Reactor command ${msg.command} failed: ${msg.reason}`);
       });
 
       this.model.onMainVideo((track, stream) => {
@@ -283,17 +291,20 @@ export class ReactorClient implements WorldModelAdapter {
 
       this.model.on("error", (err: unknown) => {
         console.warn("[ReactorClient] Transport/SDK Error:", err);
-        void this.useFallback(defaultFallback);
+        void this.useFallback(
+          defaultFallback,
+          `Reactor transport error: ${err instanceof Error ? err.message : String(err)}`
+        );
       });
 
       // Connect SDK
-      this.scheduleTimeout(this.TIMEOUTS.CONNECT, "SDK connection", defaultFallback);
+      this.scheduleTimeout(REACTOR_TIMEOUTS.CONNECT, "SDK connection", defaultFallback);
       await this.model.connect(tokenResult.token);
       this.clearTimeoutTimer();
 
       // Step 2: Upload Reference Image
       this.setStatus("uploading_image");
-      this.scheduleTimeout(this.TIMEOUTS.IMAGE, "image upload & acceptance", defaultFallback);
+      this.scheduleTimeout(REACTOR_TIMEOUTS.IMAGE, "image upload & acceptance", defaultFallback);
 
       let imageBlob: Blob;
       if (this.referenceImage.startsWith("data:")) {
@@ -312,17 +323,19 @@ export class ReactorClient implements WorldModelAdapter {
 
       // Step 3: Set Seed & Prompt. The SDK events above remain the source
       // of truth for acceptance; these calls only enqueue the commands.
-      this.scheduleTimeout(this.TIMEOUTS.PROMPT, "prompt acceptance", defaultFallback);
+      this.scheduleTimeout(REACTOR_TIMEOUTS.PROMPT, "prompt acceptance", defaultFallback);
 
       await this.model.setSeed({ seed: this.currentSeed });
       await this.model.setPrompt({ prompt: this.currentPrompt });
 
       // Step 4: Begin Generation
-      this.scheduleTimeout(this.TIMEOUTS.FIRST_FRAME, "first frame generation", defaultFallback);
+      this.scheduleTimeout(REACTOR_TIMEOUTS.FIRST_FRAME, "first frame generation", defaultFallback);
       await this.model.start();
     } catch (err: any) {
-      console.warn("[ReactorClient] Live startup failed. Fallback engaged:", err.message || err);
-      await this.useFallback(defaultFallback);
+      const startupReason = `Live startup failed: ${err.message || err}`;
+      this.fallbackReason = startupReason;
+      console.warn("[ReactorClient]", startupReason);
+      await this.useFallback(defaultFallback, startupReason);
     }
   }
 
@@ -332,7 +345,10 @@ export class ReactorClient implements WorldModelAdapter {
       try {
         await this.model.pause();
       } catch (err) {
-        await this.useFallback(this.activeFallbackAsset || "/fallbacks/fire-bedroom-orient.mp4");
+        await this.useFallback(
+          this.activeFallbackAsset || "/fallbacks/fire-bedroom-orient.mp4",
+          `Pause failed: ${err instanceof Error ? err.message : String(err)}`
+        );
       }
     } else {
       this.setStatus("paused");
@@ -348,7 +364,10 @@ export class ReactorClient implements WorldModelAdapter {
       try {
         await this.model.resume();
       } catch (err) {
-        await this.useFallback(this.activeFallbackAsset || "/fallbacks/fire-bedroom-orient.mp4");
+        await this.useFallback(
+          this.activeFallbackAsset || "/fallbacks/fire-bedroom-orient.mp4",
+          `Resume failed: ${err instanceof Error ? err.message : String(err)}`
+        );
       }
     } else {
       this.setStatus("generating");
@@ -363,7 +382,7 @@ export class ReactorClient implements WorldModelAdapter {
     this.currentPrompt = prompt;
     if (this.currentMode === "live" && this.model) {
       this.scheduleTimeout(
-        this.TIMEOUTS.BRANCH,
+        REACTOR_TIMEOUTS.BRANCH,
         "branch prompt switch",
         this.activeFallbackAsset || "/fallbacks/fire-bedroom-orient.mp4"
       );
@@ -396,21 +415,23 @@ export class ReactorClient implements WorldModelAdapter {
     this.referenceImage = "";
     this.capturedDecisionFrame = null;
     this.token = null;
+    this.fallbackReason = null;
     this.imageAccepted = false;
     this.promptAccepted = false;
     this.setStatus("idle");
   }
 
-  public async useFallback(asset: string): Promise<void> {
+  public async useFallback(asset: string, reason?: string): Promise<void> {
     this.clearTimeoutTimer();
     await this.cleanupModel();
     this.currentMode = "fallback";
     this.activeFallbackAsset = asset;
+    this.fallbackReason = reason || this.fallbackReason || "Live model unavailable";
     this.frameCallback?.(null);
     this.setStatus("fallback");
 
     this.events.emit("fallback_triggered", {
-      reason: "Live model timeout or fail-closed policy",
+      reason: this.fallbackReason,
       assetPath: asset,
       timestamp: Date.now(),
     });

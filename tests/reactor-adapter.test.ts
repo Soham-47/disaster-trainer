@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "fs";
 import path from "path";
-import { ReactorClient } from "../lib/reactor/client";
+import { ReactorClient, REACTOR_TIMEOUTS } from "../lib/reactor/client";
 import { POST as tokenRoute } from "../app/api/reactor-token/route";
 
 describe("ReactorClient Adapter", () => {
@@ -9,6 +9,11 @@ describe("ReactorClient Adapter", () => {
 
   beforeEach(() => {
     client = new ReactorClient();
+  });
+
+  it("allows enough time for remote session negotiation and the first model frame", () => {
+    expect(REACTOR_TIMEOUTS.CONNECT).toBeGreaterThanOrEqual(60_000);
+    expect(REACTOR_TIMEOUTS.FIRST_FRAME).toBeGreaterThanOrEqual(60_000);
   });
 
   afterEach(() => {
@@ -73,6 +78,7 @@ describe("ReactorClient Adapter", () => {
     expect(client.getMode()).toBe("fallback");
     expect(client.getStatus()).toBe("fallback");
     expect(client.getActiveFallbackAsset()).toBe("/fallbacks/fire-bedroom-orient.mp4");
+    expect(client.getFallbackReason()).toContain("Token exchange failed");
   });
 
   it("should transition to fallback mode when useFallback is called", async () => {
