@@ -72,6 +72,7 @@ export type ScenarioPack = DisasterPack & {
   referenceImage: string;
   reactorSeed: number;
   basePrompt: string;
+  orientFallbackAsset: string;
   cues: ControlledCue[];
   consequences: Record<string, ConsequenceDefinition>;
   debrief: GeneratedScenario["debrief"];
@@ -102,6 +103,7 @@ export type GeneratedScenario = {
   referenceImage: string;
   reactorSeed: number;
   basePrompt: string;
+  orientFallbackAsset: string;
   cues: ControlledCue[];
   decision: DecisionTemplate;
   consequences: Record<string, ConsequenceDefinition>;

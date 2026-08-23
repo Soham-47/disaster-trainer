@@ -51,6 +51,7 @@ export const structureFirePack: ScenarioPack = {
   referenceImage: "/references/bedroom-fire.jpg",
   reactorSeed: 42069,
   basePrompt: "A navigable structure-fire scene with a closed exit door, smoke under the gap, an alarm, and no invented safety instructions.",
+  orientFallbackAsset: "/fallbacks/fire-bedroom-orient.mp4",
   cues: [
     {
       id: "warm-door",

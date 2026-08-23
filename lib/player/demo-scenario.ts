@@ -17,6 +17,7 @@ export const demoScenario: GeneratedScenario = {
   referenceImage: "/references/bedroom-fire.jpg",
   reactorSeed: 42069,
   basePrompt: "A bedroom with smoke under a closed exit door and an emergency alarm sounding.",
+  orientFallbackAsset: "/fallbacks/fire-bedroom-orient.mp4",
   cues: [
     {
       id: "warm-door",

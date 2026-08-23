@@ -46,7 +46,7 @@ export function ExperiencePlayer({
     (adapter as WorldModelAdapter & { getStatus?: () => WorldModelStatus }).getStatus?.() ?? "idle"
   );
   const [mode, setMode] = useState<"live" | "fallback">(modeOf(adapter));
-  const [activeAsset, setActiveAsset] = useState(scenario.consequences[scenario.decision.choices[0].consequenceStateId]?.fallbackAsset ?? "/fallbacks/fire-bedroom-orient.mp4");
+  const [activeAsset, setActiveAsset] = useState(scenario.orientFallbackAsset);
   const [ambientPrompt, setAmbientPrompt] = useState(scenario.basePrompt);
   const [capturedFrame, setCapturedFrame] = useState<string | null>(null);
   const [liveStream, setLiveStream] = useState<MediaStream | null>(null);
@@ -100,7 +100,7 @@ export function ExperiencePlayer({
     setVisualBranch("orient");
     setCapturedFrame(null);
     setAlternativeStarted(false);
-    const orientFallback = nextScenario.consequences[nextScenario.decision.choices[0].consequenceStateId]?.fallbackAsset ?? "/fallbacks/fire-bedroom-orient.mp4";
+    const orientFallback = nextScenario.orientFallbackAsset;
     setActiveAsset(orientFallback);
     await adapter.start({
       referenceImage: nextScenario.referenceImage,

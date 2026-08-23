@@ -24,6 +24,7 @@ describe("structure-fire scenario engine", () => {
     expect(first).toEqual(second);
     expect(first.validationStatus).toBe("approved");
     expect(first.basePrompt).toContain("apartment");
+    expect(first.orientFallbackAsset).toBe("/fallbacks/fire-bedroom-orient.mp4");
     expect(first.basePrompt).toContain("night");
     expect(first.decision.choices).toHaveLength(2);
   });
@@ -55,4 +56,3 @@ describe("structure-fire scenario engine", () => {
     expect(result).toEqual({ valid: true, errors: [] });
   });
 });
-

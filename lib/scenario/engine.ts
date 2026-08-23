@@ -46,6 +46,7 @@ export function composeScenario(pack: ScenarioPack, parameters: ScenarioParamete
     referenceImage: pack.referenceImage,
     reactorSeed: pack.reactorSeed + (stableHash(id) % 100000),
     basePrompt: `${pack.basePrompt} ${parameterText}`,
+    orientFallbackAsset: pack.orientFallbackAsset,
     cues: pack.cues.map((cue) => ({ ...cue, requiredVisualFacts: [...cue.requiredVisualFacts] })),
     decision: {
       ...pack.decisions[0],
