@@ -1,8 +1,10 @@
 import type {
+  EpisodeGraph,
   GeneratedScenario,
   ScenarioPack,
   ScenarioParameters,
 } from "./types";
+import { validateEpisodeGraph } from "./episode-validation";
 import {
   validateGeneratedScenario,
   validateScenarioPack,
@@ -10,6 +12,13 @@ import {
 } from "./validation";
 
 export { validateGeneratedScenario, validateScenarioPack, validateScenarioParameters };
+export { validateEpisodeGraph } from "./episode-validation";
+
+export function composeEpisode(graph: EpisodeGraph): EpisodeGraph {
+  const validation = validateEpisodeGraph(graph);
+  if (!validation.valid) throw new Error(`Invalid episode graph: ${validation.errors.join("; ")}`);
+  return structuredClone(graph);
+}
 
 function stableHash(value: string): number {
   let hash = 0;

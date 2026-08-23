@@ -25,6 +25,122 @@ export type DisasterType =
   | "gas_leak"
   | "extreme_heat";
 
+export type NodeKind =
+  | "explore"
+  | "interaction"
+  | "hazard"
+  | "checkpoint"
+  | "consequence"
+  | "debrief"
+  | "transfer"
+  | "complete";
+
+export type ActionVerb =
+  | "inspect"
+  | "move"
+  | "use"
+  | "communicate"
+  | "assist"
+  | "shelter"
+  | "wait";
+
+export type StateChange = {
+  key: string;
+  value: boolean | number | string;
+};
+
+export type SceneSpec = {
+  referenceImage: string;
+  seed: number;
+  invariantPrompt: string;
+  deltaPrompt: string;
+  requiredFacts: string[];
+  forbiddenFacts: string[];
+  cameraPreset: number[];
+  attentionWindow: "small" | "large" | "auto";
+  fallbackAsset: string;
+};
+
+export type HintDefinition = {
+  id: string;
+  tier: 1 | 2 | 3;
+  text: string;
+  cueId?: string;
+};
+
+export type DebriefDefinition = {
+  warningCue: string;
+  recommendedAction: string;
+  principle: string;
+  source: SourceReference;
+};
+
+export type InteractionDefinition = {
+  id: string;
+  verb: ActionVerb;
+  targetId: string;
+  label: string;
+  aliases: string[];
+  toolId?: string;
+  safetyClass: SafetyClass;
+  nextNodeId: string;
+  stateChanges: StateChange[];
+};
+
+export type EpisodeNode = {
+  id: string;
+  kind: NodeKind;
+  title: string;
+  immediatePriority: string;
+  scene: SceneSpec;
+  cueIds: string[];
+  interactions: InteractionDefinition[];
+  checkpoint: boolean;
+  hintIds: string[];
+};
+
+export type EpisodeGraph = {
+  id: string;
+  version: string;
+  disasterType: DisasterType;
+  startNodeId: string;
+  nodes: Record<string, EpisodeNode>;
+  cues: ControlledCue[];
+  hints: HintDefinition[];
+  debrief: DebriefDefinition;
+  transferEpisodeId: string;
+  sourceReferences: SourceReference[];
+};
+
+export type WorldState = {
+  episodeId: string;
+  nodeId: string;
+  checkpointId: string | null;
+  variables: Record<string, boolean | number | string>;
+  hazardLevels: Record<string, number>;
+  availableResources: string[];
+  discoveredCueIds: string[];
+  completedActionIds: string[];
+  hintsUsed: number;
+  elapsedMs: number;
+  status: "loading" | "active" | "rewinding" | "debrief" | "transfer" | "complete" | "error";
+};
+
+export type ActionIntent = {
+  verb: ActionVerb;
+  targetId: string;
+  toolId?: string;
+  source: "hotspot" | "action-wheel" | "text";
+};
+
+export type SimulationCheckpoint = {
+  id: string;
+  nodeId: string;
+  frameDataUrl: string;
+  worldState: WorldState;
+  createdAt: number;
+};
+
 export type ScenarioParameters = {
   disasterType: DisasterType;
   environment: "apartment" | "hotel" | "office" | "school" | "vehicle" | "street" | "shopping_mall";
