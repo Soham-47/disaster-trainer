@@ -611,6 +611,12 @@ export class ReactorClient implements WorldModelAdapter {
   public async setNavigation(input: WorldModelNavigationInput): Promise<void> {
     if (this.currentMode !== "live" || !this.model) return;
     const model = this.model;
+    // The SDK starts in `waiting` while the WebRTC transport negotiates. Its
+    // command layer emits a fatal error for any movement/look command before
+    // the transport reaches `ready`; UI effects can legitimately fire during
+    // that window (for example, an initial key-up or blur cleanup). Ignore
+    // those commands and let the next user input drive navigation once ready.
+    if (model.getStatus() !== "ready") return;
     await Promise.all([
       model.setMoveLongitudinal({ move_longitudinal: input.forward ? "forward" : input.backward ? "back" : "idle" }),
       model.setMoveLateral({ move_lateral: input.left ? "strafe_left" : input.right ? "strafe_right" : "idle" }),

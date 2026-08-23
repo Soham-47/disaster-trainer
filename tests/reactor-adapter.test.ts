@@ -100,6 +100,18 @@ vi.mock("@reactor-models/lingbot-world-2", () => {
         this.resumeHandlers.forEach((handler) => handler());
       }, 10);
     }
+    async setMoveLongitudinal() {
+      if (this.status !== "ready") throw new Error(`Cannot send movement while status is "${this.status}"`);
+    }
+    async setMoveLateral() {
+      if (this.status !== "ready") throw new Error(`Cannot send movement while status is "${this.status}"`);
+    }
+    async setLookHorizontal() {
+      if (this.status !== "ready") throw new Error(`Cannot send look while status is "${this.status}"`);
+    }
+    async setLookVertical() {
+      if (this.status !== "ready") throw new Error(`Cannot send look while status is "${this.status}"`);
+    }
     async reset() {}
     async disconnect() {}
   }
@@ -221,6 +233,38 @@ describe("ReactorClient Adapter", () => {
     expect(client.getMode()).toBe("live");
     expect(client.getStatus()).toBe("generating");
     expect(client.getActiveFallbackAsset()).toBeNull();
+  });
+
+  it("ignores navigation commands until the SDK connection is ready", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((url) => {
+      if (typeof url === "string" && url.includes("/api/reactor-token")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ token: "jwt_test_token", mode: "live" }),
+        });
+      }
+      return Promise.resolve({ ok: true, blob: async () => new Blob(["test"]) });
+    }));
+
+    const startPromise = client.start({
+      referenceImage: "/references/bedroom-fire.jpg",
+      prompt: "Bedroom fire scenario prompt",
+      seed: 12345,
+      fallbackAsset: "/fallbacks/fire-bedroom-orient.mp4",
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    await expect(client.setNavigation({
+      forward: true,
+      backward: false,
+      left: false,
+      right: false,
+      lookHorizontal: "idle",
+      lookVertical: "idle",
+    })).resolves.toBeUndefined();
+
+    await startPromise;
+    expect(client.getStatus()).toBe("generating");
   });
 
   it("waits for live pause and resume acknowledgements", async () => {

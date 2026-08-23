@@ -76,6 +76,12 @@ export function SimulationPlayer({ adapter = reactorClient }: SimulationPlayerPr
     });
   }, []);
 
+  const handleNavigation = useCallback((input: WorldModelNavigationInput) => {
+    void adapter.setNavigation(input).catch((error) => {
+      console.warn("[SimulationPlayer] Navigation command was ignored:", error);
+    });
+  }, [adapter]);
+
   useEffect(() => () => {
     streamFrame(null);
     void adapter.stopNavigation().catch(() => undefined);
@@ -296,7 +302,7 @@ export function SimulationPlayer({ adapter = reactorClient }: SimulationPlayerPr
         <GenerationStatus status={status} mode={mode} modelName="LingBot World 2" fallbackReason={mode === "fallback" ? fallbackReason : null} />
       </header>
       <section className="relative mx-auto h-[calc(100vh-73px)] min-h-[640px] max-w-[1600px] overflow-hidden bg-black">
-        <WorldViewport status={status} mode={mode} liveStream={liveStream} fallbackAsset={fallbackAsset} capturedFrameUrl={capturedFrame} isRewinding={isRewinding} onCapturedFrame={(frame) => { frameRef.current = frame; setCapturedFrame(frame); }} onNavigation={(input: WorldModelNavigationInput) => { void adapter.setNavigation(input); }} />
+        <WorldViewport status={status} mode={mode} liveStream={liveStream} fallbackAsset={fallbackAsset} capturedFrameUrl={capturedFrame} isRewinding={isRewinding} onCapturedFrame={(frame) => { frameRef.current = frame; setCapturedFrame(frame); }} onNavigation={handleNavigation} />
         {graph && world && currentNode && <SimulationHUD title={currentNode.title} immediatePriority={currentNode.immediatePriority} hazardLevels={world.hazardLevels} status={phase === "transfer" ? "transfer" : world.status} nodeIndex={nodeIndex} nodeCount={nodeList.length} />}
         {isRewinding && <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-amber-950/40 backdrop-blur-sm"><span className="rounded-full border border-amber-300/40 bg-black/70 px-5 py-2 text-xs font-mono uppercase tracking-[0.22em] text-amber-200">Restoring checkpoint</span></div>}
         {currentNode && world?.status === "debrief" && (
