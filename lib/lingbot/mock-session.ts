@@ -3,6 +3,7 @@ import type { LingBotFileRef, LingBotNavigationInput, LingBotRenderJob, LingBotS
 
 export class MockLingBotSession implements LingBotSessionPort {
   private stream: MediaStream | null = null;
+  private animationTimer: ReturnType<typeof setInterval> | null = null;
   readonly renders: LingBotRenderJob[] = [];
   readonly references: LingBotFileRef[] = [];
   private nextUpload = 1;
@@ -28,7 +29,11 @@ export class MockLingBotSession implements LingBotSessionPort {
   async setNavigation(_input: LingBotNavigationInput): Promise<void> { await Promise.resolve(); }
   async stopNavigation(): Promise<void> { await Promise.resolve(); }
   getStream(): MediaStream | null { return this.stream; }
-  async disconnect(): Promise<void> { this.stream = null; }
+  async disconnect(): Promise<void> {
+    if (this.animationTimer) clearInterval(this.animationTimer);
+    this.animationTimer = null;
+    this.stream = null;
+  }
 
   private createStream(): MediaStream {
     if (typeof document !== "undefined") {
@@ -36,7 +41,18 @@ export class MockLingBotSession implements LingBotSessionPort {
       canvas.width = 1280; canvas.height = 720;
       const context = canvas.getContext("2d");
       context?.fillRect(0, 0, canvas.width, canvas.height);
-      if (typeof canvas.captureStream === "function") return canvas.captureStream(16);
+      if (typeof canvas.captureStream === "function") {
+        const stream = canvas.captureStream(16);
+        // Canvas capture streams only publish a frame after the canvas changes.
+        // Keep the mock video alive so checkpoint capture and branch UI tests
+        // exercise the same ready-state path as a live stream.
+        this.animationTimer = setInterval(() => {
+          if (!context) return;
+          context.fillStyle = "#050505";
+          context.fillRect(0, 0, 2, 2);
+        }, 100);
+        return stream;
+      }
     }
     return { getTracks: () => [] } as unknown as MediaStream;
   }

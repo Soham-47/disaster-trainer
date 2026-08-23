@@ -30,15 +30,27 @@ export function LingBotViewport({ stream, phase, transitionFrame, transitionLabe
     setVideoReady(false);
     onCaptureReady(null);
     if (!stream) return;
+    let readyConfirmed = false;
+    let frameRequest = 0;
     const ready = () => {
+      if (readyConfirmed) return true;
       if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) return;
+      readyConfirmed = true;
       setVideoReady(true);
       onCaptureReady(() => captureVideoFrame(video));
       onVideoReady();
+      return true;
+    };
+    const poll = () => {
+      if (!ready()) frameRequest = window.requestAnimationFrame(poll);
     };
     video.addEventListener("loadeddata", ready); video.addEventListener("canplay", ready);
+    frameRequest = window.requestAnimationFrame(poll);
     void video.play().catch(() => undefined);
-    return () => { video.removeEventListener("loadeddata", ready); video.removeEventListener("canplay", ready); onCaptureReady(null); };
+    return () => {
+      window.cancelAnimationFrame(frameRequest);
+      video.removeEventListener("loadeddata", ready); video.removeEventListener("canplay", ready); onCaptureReady(null);
+    };
   }, [stream, onCaptureReady, onVideoReady]);
   const showTransition = Boolean(transitionFrame && transitionPhases.has(phase));
   return <div className="relative h-full min-h-[480px] w-full overflow-hidden bg-black">
