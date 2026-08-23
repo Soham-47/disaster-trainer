@@ -1,0 +1,1302 @@
+# Counterfactual Disaster Trainer
+
+## Complete Hackathon Build Plan and Product Specification
+
+**Track:** Interactive Media
+**Event:** Inception Series: Hackathon 2.0
+**Participation:** Online
+**Team:** 3–4 builders
+**Build status:** Greenfield
+**Working principle:** **Open-ended situations. Constrained decisions. Controlled safety truth.**
+
+---
+
+## 1. Executive Summary
+
+Counterfactual Disaster Trainer is an interactive learning platform that generates many disaster situations from controlled, source-grounded scenario packs. A learner enters a generated environment, receives a small number of meaningful choices, experiences the consequence of the selected action, rewinds to the same decision, and then experiences the counterfactual alternative. A short debrief explains the warning cue and safety principle, followed by a visually different transfer scenario that tests whether the learner can apply the principle again.
+
+The central learning loop is:
+
+> Make a decision → experience its consequence → rewind → experience the alternative → apply the principle in a new situation.
+
+The platform is broad in the situations it can generate, but deliberately narrow at each decision. The world model controls visual generation and real-time scene changes. It never decides which action is safe. A deterministic scenario engine owns available choices, safety classifications, consequences, scoring, citations, and fallback behavior.
+
+The hackathon implementation will prove this architecture through one validated structure-fire disaster pack that can generate multiple combinations of environment and complication. The live demo will use an apartment or hotel fire with a warm exit door, two controlled choices, two visibly different futures, a rewind, a sourced debrief, and a transfer check in a different environment.
+
+The product must be presented as an experimental preparedness-practice experience—not certified training and not a physically exact disaster simulator.
+
+---
+
+## 2. Problem, Audience, and Value Proposition
+
+### Problem
+
+Most civilians encounter disaster preparation through passive articles, posters, or videos. Physical drills can be dangerous, expensive, disruptive, or impossible to repeat across many conditions. Conventional branching videos support only a fixed set of prerecorded scenes and often reward completion rather than whether the learner makes a safer subsequent decision.
+
+### Primary learner
+
+An untrained civilian practicing a high-stakes household, workplace, school, hotel, or public-space decision from a normal web browser.
+
+### Hackathon value proposition
+
+> Practice a disaster decision inside a responsive generated world, see both futures, and prove what you learned in a new situation.
+
+### Long-term platform value
+
+The same player and counterfactual loop can support many reviewed disaster packs, environments, roles, and complications. Schools, employers, insurers, public agencies, and preparedness organizations may eventually distribute scenario collections, while the experience remains learner-first.
+
+### Differentiation
+
+- Unlike a passive video, the learner makes the pivotal choice and controls which future is experienced first.
+- Unlike rigid branching media, environments and contextual complications are generated compositionally.
+- Unlike an unrestricted AI simulation, safety truth and scoring remain deterministic and reviewable.
+- Unlike expensive VR, the experience runs in a browser and uses familiar keyboard, touch, and button controls.
+- Learning is evaluated through a transfer decision, not completion time or spectacle.
+
+---
+
+## 3. Hackathon Alignment
+
+The project is submitted under **Interactive Media** because it is a responsive visual story whose sequence and emotional meaning are shaped by the learner’s decision.
+
+The implementation explicitly targets the judging dimensions:
+
+| Criterion | Product evidence |
+|---|---|
+| World-model native | Reactor generates the navigable scene and both consequence futures; removing the world model materially changes the product. |
+| Real time | The learner can look around the live scene and the model responds to branch prompt changes at runtime. |
+| User experience | A short cinematic flow, constrained choices, a signature rewind, and a causal debrief create an understandable experience. |
+| Technical execution | Typed scenario contracts, deterministic state transitions, event-driven Reactor handling, validation gates, and fallback behavior. |
+| Potential and real-world impact | Extensible disaster packs and transfer-based learning measurement demonstrate a credible civilian-preparedness platform. |
+
+Reactor must remain the core technology. Additional partner tools are optional and must not delay the core loop. Fish Audio may be used for prewritten narration only after the application is stable.
+
+The remote submission must include a deployed build, repository, concise written explanation, attribution of tools and sources, known limitations, and a clear recording that proves Reactor is operating live.
+
+---
+
+## 4. Product Principles and Safety Boundary
+
+### 4.1 Open-ended situations
+
+The platform creates variety by combining approved disaster families, environments, times, occupants, infrastructure conditions, and complications. It does not generate arbitrary safety rules.
+
+### 4.2 Constrained decisions
+
+At a pivotal moment the learner receives two to four choices. Every choice has a predefined identifier, safety classification, next state, consequence description, and debrief mapping. Free-text actions are out of scope for scoring.
+
+### 4.3 Controlled safety truth
+
+The scenario engine is authoritative for:
+
+- Which warning cues are present.
+- Which choices are available.
+- Whether each choice is safe, unsafe, or conditional.
+- Which consequence follows.
+- What the learner is told in the debrief.
+- Whether the transfer decision demonstrates success.
+- Which source supports the principle.
+
+### 4.4 World model as renderer
+
+The world model is responsible for:
+
+- Generating the environment from a reference image and prompt.
+- Maintaining a responsive first-person video stream.
+- Responding visually to the selected consequence prompt.
+- Making the two futures visibly and emotionally different.
+
+It is not authoritative for physical truth, emergency instructions, scoring, or validation.
+
+### 4.5 Fail closed
+
+If live generation contradicts the controlled state, times out, or becomes unavailable, the experience uses an approved Reactor-generated fallback continuation. The learner may complete the experience, but the run is marked unscored.
+
+### 4.6 Honest claims
+
+Use “preparedness practice,” “guided visualization,” and “experimental prototype.” Do not claim certified training, professional validation, perfect physical simulation, or accurate prediction of a specific real disaster.
+
+---
+
+## 5. User Experience Specification
+
+### 5.1 Entry screen
+
+The entry screen communicates the platform’s breadth without requiring multiple completed disaster packs.
+
+Controls:
+
+- **Start featured scenario:** begins the reviewed structure-fire experience.
+- **Surprise me:** chooses an allowed combination within the reviewed fire pack.
+- **Choose a situation:** selects from apartment, hotel, or office.
+- Future disaster cards may appear as “In development,” but they must not be playable or described as validated.
+
+The hackathon demo should begin with one click and avoid account creation, onboarding forms, photo uploads, microphone permissions, or lengthy instructions.
+
+### 5.2 Core experience states
+
+#### State 1: Orient
+
+- Display the live Reactor world full-bleed.
+- Show a brief context card such as “02:13 AM · Fourth-floor apartment.”
+- Allow limited look controls and optional forward/back movement.
+- Establish the alarm, smoke under the door, low visibility, and other controlled cues.
+- Target duration: 10–20 seconds.
+
+#### State 2: Decision
+
+- Pause or visually stabilize the world.
+- Present one pivotal question.
+- Display exactly two choices in the MVP:
+  - **Open the door and try the hallway.**
+  - **Keep it closed and call/signal for help.**
+- Prevent double submission.
+- Record the selected action and timestamp.
+- Do not reveal which choice is recommended before selection.
+
+#### State 3: Consequence
+
+- Resume generation or apply the selected prompt at the next confirmed model boundary.
+- Show the selected future for 10–15 seconds.
+- Use an unobtrusive label: “Your choice.”
+- Do not show a numerical score.
+
+#### State 4: Rewind
+
+- Pause the stream.
+- Transition to the captured decision frame.
+- Apply a reverse-time animation, reversed sound effect, and short timeline marker.
+- Display: “Same warning. Different choice.”
+- Target duration: 3–5 seconds.
+
+#### State 5: Alternative
+
+- Generate or play the opposite branch using the same reference image, base prompt, fixed seed, and decision context.
+- Label the branch “Counterfactual.”
+- Show it for 10–15 seconds.
+- Always show the alternative, regardless of whether the initial action was safe.
+
+#### State 6: Debrief
+
+Present three cards:
+
+1. **Warning cue:** the closed door felt warm.
+2. **Recommended response:** use another exit; if exits are blocked, remain behind the closed door and call or signal for help.
+3. **Why it matters:** the closed door acts as a barrier while the hallway may contain heat and smoke.
+
+Include the source link and a clear prototype disclaimer. Avoid fear-based scoring, death counters, rankings, or sensational claims.
+
+#### State 7: Transfer check
+
+- Present a visually different setting, such as a hotel room.
+- Preserve the learned principle but change surface details, lighting, layout, and narrative context.
+- Present the warm-door cue without repeating the debrief.
+- Ask the learner to choose between a small set of actions.
+- Record whether the transfer choice is safe.
+- Display “Applied safely,” “Needs another attempt,” or “Principle retained,” rather than a gamified preparedness rank.
+
+### 5.3 Session result semantics
+
+| Initial decision | Transfer decision | Result label | `improved` |
+|---|---|---|---|
+| Unsafe | Safe | Improved | `true` |
+| Unsafe | Unsafe | Needs another attempt | `false` |
+| Safe | Safe | Principle retained | `false` |
+| Safe | Unsafe | Regressed | `false` |
+
+Transfer success is stored separately from improvement so safe-first learners are represented correctly.
+
+### 5.4 Accessibility
+
+- All critical visual cues must also be communicated through text.
+- Captions are required for narration and environmental audio.
+- Choices must be keyboard accessible and have visible focus states.
+- Do not rely on color alone for safety status.
+- Provide reduced-motion behavior that replaces rewind animation with a short crossfade.
+- Maintain readable contrast over video with a consistent overlay gradient.
+
+---
+
+## 6. Scenario Breadth Strategy
+
+The platform should maximize coverage through controlled composition rather than unconstrained generation.
+
+### 6.1 Disaster ontology
+
+Long-term supported families may include:
+
+```ts
+type DisasterType =
+  | "structure_fire"
+  | "earthquake"
+  | "flash_flood"
+  | "wildfire"
+  | "cyclone"
+  | "tornado"
+  | "tsunami"
+  | "landslide"
+  | "gas_leak"
+  | "extreme_heat";
+```
+
+Only `structure_fire` is validated and playable in the hackathon MVP.
+
+### 6.2 Compositional dimensions
+
+```ts
+type ScenarioParameters = {
+  disasterType: DisasterType;
+  environment:
+    | "apartment"
+    | "hotel"
+    | "office"
+    | "school"
+    | "vehicle"
+    | "street"
+    | "shopping_mall";
+  timeOfDay: "day" | "night";
+  occupancy: "alone" | "family" | "crowd";
+  mobilityConstraint: "none" | "child" | "elderly_person";
+  infrastructureState:
+    | "normal"
+    | "power_outage"
+    | "blocked_exit"
+    | "network_failure";
+  severity: "early_warning" | "active_danger";
+};
+```
+
+Each disaster pack declares which values and combinations it supports. Invalid or unreviewed combinations must be rejected before prompt generation.
+
+### 6.3 Hackathon variation matrix
+
+The structure-fire pack supports:
+
+- Environments: apartment, hotel, office.
+- Time: day or night.
+- Occupancy: alone or with one other person.
+- Infrastructure: normal, power outage, or blocked primary exit.
+- Severity: warning phase or active smoke.
+
+Not every cross-product combination needs a unique safety rule. Variants share the warm-door principle while changing visual presentation and transfer context.
+
+### 6.4 Future authoring workflow
+
+Adding a disaster family requires:
+
+1. Select authoritative public guidance.
+2. Define a small set of safety principles.
+3. Convert each principle into bounded decision templates.
+4. Define allowed parameters and forbidden combinations.
+5. Write consequence prompt constraints and fallback descriptions.
+6. Validate scripts with a qualified reviewer.
+7. Test visual generations repeatedly.
+8. Publish the pack only after review status is approved.
+
+No user-generated scenario becomes scored training automatically.
+
+---
+
+## 7. Data Contracts
+
+### 7.1 Core enums
+
+```ts
+type SafetyClass = "safe" | "unsafe" | "conditional";
+type ValidationStatus = "approved" | "illustrative" | "rejected";
+type GenerationMode = "live" | "fallback";
+type ExperienceState =
+  | "entry"
+  | "orient"
+  | "decision"
+  | "consequence"
+  | "rewind"
+  | "alternative"
+  | "debrief"
+  | "transfer"
+  | "result"
+  | "error";
+```
+
+### 7.2 Disaster pack
+
+```ts
+type SourceReference = {
+  title: string;
+  organization: string;
+  url: string;
+  reviewedAt: string;
+};
+
+type ChoiceDefinition = {
+  id: string;
+  label: string;
+  safetyClass: SafetyClass;
+  consequenceStateId: string;
+};
+
+type DecisionTemplate = {
+  id: string;
+  prompt: string;
+  requiredCueIds: string[];
+  choices: ChoiceDefinition[];
+  recommendedChoiceIds: string[];
+};
+
+type DisasterPack = {
+  id: string;
+  version: string;
+  disasterType: DisasterType;
+  status: ValidationStatus;
+  supportedParameters: Partial<Record<keyof ScenarioParameters, string[]>>;
+  forbiddenCombinations: Array<Partial<ScenarioParameters>>;
+  decisions: DecisionTemplate[];
+  sourceReferences: SourceReference[];
+};
+```
+
+### 7.3 Generated scenario
+
+```ts
+type ControlledCue = {
+  id: string;
+  learnerCopy: string;
+  requiredVisualFacts: string[];
+};
+
+type ConsequenceDefinition = {
+  stateId: string;
+  selectedChoiceId: string;
+  prompt: string;
+  requiredFacts: string[];
+  forbiddenFacts: string[];
+  durationSeconds: number;
+  fallbackAsset: string;
+};
+
+type GeneratedScenario = {
+  id: string;
+  packId: string;
+  packVersion: string;
+  parameters: ScenarioParameters;
+  referenceImage: string;
+  reactorSeed: number;
+  basePrompt: string;
+  cues: ControlledCue[];
+  decision: DecisionTemplate;
+  consequences: Record<string, ConsequenceDefinition>;
+  debrief: {
+    warningCue: string;
+    recommendedAction: string;
+    principle: string;
+    source: SourceReference;
+  };
+  transferScenarioId: string;
+  validationStatus: ValidationStatus;
+};
+```
+
+### 7.4 Session record
+
+```ts
+type SessionResult = {
+  sessionId: string;
+  scenarioId: string;
+  initialDecisionId: string;
+  initialSafetyClass: SafetyClass;
+  transferDecisionId: string;
+  transferSuccessful: boolean;
+  improved: boolean;
+  generationMode: GenerationMode;
+  generationValidated: boolean;
+  scoreEligible: boolean;
+  startedAt: string;
+  completedAt: string;
+};
+```
+
+For the hackathon, store this object in component state and `localStorage`. Do not build authentication or a database.
+
+---
+
+## 8. System Architecture
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│ Next.js Web Application                                    │
+│                                                             │
+│  Experience Player ── State Machine ── Session Recorder     │
+│          │                  │                                │
+│          │                  ├── Scenario Pack                │
+│          │                  ├── Choice/Outcome Rules         │
+│          │                  └── Transfer Scoring             │
+│          │                                                   │
+│          ├── Reactor Client / Event Adapter                  │
+│          │        └── Live video track                       │
+│          │                                                   │
+│          └── Fallback Media Controller                       │
+│                                                             │
+│  POST /api/reactor-token                                    │
+│          └── REACTOR_API_KEY remains server-side             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Technology decisions
+
+- **Framework:** Next.js with React and TypeScript.
+- **Styling:** Tailwind CSS or plain CSS modules, whichever the team can ship fastest.
+- **State management:** typed reducer or small explicit state machine; no external dependency is required.
+- **World generation:** `@reactor-models/lingbot-world-2` JavaScript SDK.
+- **Persistence:** browser `localStorage` only.
+- **Deployment:** Vercel or another team-familiar Next.js host.
+- **Fallback assets:** bundled MP4/WebM files generated with Reactor before final recording.
+
+Avoid a separate Python service, Supabase, SQLite, WebSockets managed by the team, vision LLM, speech-to-text, user accounts, and analytics dashboards.
+
+---
+
+## 9. Reactor Integration Specification
+
+### 9.1 Authentication
+
+- Store `REACTOR_API_KEY` only in server environment variables.
+- Implement `POST /api/reactor-token` to mint a short-lived token scoped to LingBot World 2.
+- The browser receives only the short-lived token.
+- Return structured errors without exposing upstream response bodies or keys.
+
+### 9.2 Session initialization
+
+The client must:
+
+1. Request a short-lived token.
+2. Connect the LingBot model.
+3. Upload the scenario reference image.
+4. Wait for `image_accepted`.
+5. Set the base prompt.
+6. Wait for `prompt_accepted` or conditions-ready confirmation.
+7. Set the fixed non-negative seed.
+8. Start generation.
+9. Wait for `generation_started` before entering `orient`.
+
+Both a prompt and reference image are required before generation starts.
+
+### 9.3 Event-driven control
+
+SDK commands are asynchronous. UI transitions must follow model events:
+
+- `image_accepted`: reference image is ready.
+- `prompt_accepted`: prompt change is accepted.
+- `conditions_ready`: generation conditions are ready.
+- `generation_started`: show live orient state.
+- `chunk_complete`: update readiness and apply queued state changes.
+- `generation_paused`: enter decision or rewind state.
+- `generation_resumed`: enter consequence playback.
+- `command_error`: begin fallback transition.
+
+Never assume that awaiting a setter means the next displayed chunk already reflects it.
+
+### 9.4 Branching
+
+- At the decision, capture the displayed frame or retain a prepared decision still.
+- Pause at the next valid boundary.
+- Send the chosen consequence prompt.
+- Wait for prompt confirmation.
+- Resume and display the chosen future.
+- For the counterfactual, reset and reinitialize with the same reference image, base configuration, and seed, then apply the opposite consequence prompt.
+- Use the captured decision frame during initialization so restart latency is hidden.
+
+The product must not promise frame-identical rewind. It promises restoration of the same controlled decision context.
+
+### 9.5 Timeout policy
+
+Suggested hackathon defaults:
+
+- Token request: 8 seconds.
+- Connection: 10 seconds.
+- Image acceptance: 10 seconds.
+- Prompt acceptance: 8 seconds.
+- First visible video: 15 seconds.
+- Branch transition: 8 seconds.
+
+Any timeout invokes fallback once. Do not retry indefinitely during a learner session.
+
+### 9.6 Cost control
+
+- Start generation only after the learner begins.
+- Pause whenever a decision or debrief overlay is active.
+- Stop/reset sessions after the alternative finishes.
+- Avoid multiple permanently active sessions.
+- Use fallback assets during team testing when live generation is unnecessary.
+- Track approximate generated seconds during QA.
+
+---
+
+## 10. Controlled Scenario Engine
+
+### Responsibilities
+
+- Select an approved parameter combination.
+- Resolve the matching decision template.
+- Generate prompts from reviewed fragments.
+- Provide available choices.
+- Determine branch order.
+- Calculate transfer success and improvement.
+- Decide whether a run is score-eligible.
+
+### Scenario generation algorithm
+
+```text
+1. Receive requested pack and optional parameters.
+2. Reject values not declared by the pack.
+3. Reject forbidden parameter combinations.
+4. Fill unspecified values from a deterministic allowed default set.
+5. Select a compatible decision template.
+6. Compose the world prompt from reviewed prompt fragments.
+7. Attach required and forbidden visual facts to each consequence.
+8. Validate that every choice has an outcome and safety class.
+9. Validate that the debrief and source are present.
+10. Emit an immutable GeneratedScenario object.
+```
+
+Do not ask a language model to create the final `safetyClass`, recommended action, scoring logic, or source citation.
+
+### MVP fire scenario
+
+**Context:** learner wakes to an alarm in a bedroom; smoke is visible beneath a closed door; the door feels warm.
+
+**Choice A:** open the door and enter the hallway.
+**Classification:** unsafe for this controlled scenario.
+
+**Choice B:** keep the door closed, block smoke intrusion if possible, and call or signal for help.
+**Classification:** safe for this controlled scenario in which other exits are blocked.
+
+**Grounding:** American Red Cross guidance states that a closed door should be felt before opening; if it is warm, use another way out, and if smoke, heat, or flames block exits, remain behind the closed door and call or signal for help.
+
+Source: <https://www.redcross.org/content/dam/redcross/atg/PDF_s/Preparedness___Disaster_Recovery/Disaster_Preparedness/Home_Fire/FireFAQs.pdf>
+
+The final learner-facing wording must be reviewed before any claim of validated training.
+
+---
+
+## 11. Accuracy and Validation Pipeline
+
+Accuracy has three distinct dimensions and must not be represented as one undifferentiated score.
+
+### 11.1 Safety accuracy
+
+Required before scoring:
+
+- Scenario pack status is `approved`.
+- Every decision choice has a reviewed safety class.
+- Debrief text references the same controlled cues and conditions.
+- An authoritative source is attached.
+- Conditional guidance is not presented as universal.
+- A qualified reviewer has approved the script before public training claims.
+
+### 11.2 Narrative consistency
+
+Check that:
+
+- The decision references objects actually included in the scene.
+- The same occupants, exits, and constraints persist across both futures.
+- The consequence follows from the learner’s choice.
+- The counterfactual changes the action and downstream consequence, not unrelated scenario facts.
+- The transfer scenario tests the same principle without copying the same layout.
+
+### 11.3 Visual consistency
+
+Manual MVP checklist for each branch:
+
+- Required room type remains recognizable.
+- The referenced door remains in approximately the same location.
+- Smoke, heat, or obstruction cues do not disappear before the decision.
+- The safe branch does not show a newly invented dangerous instruction.
+- The unsafe branch does not visually imply that the scripted unsafe action is clearly safe.
+- Occupants and exits do not appear or disappear in a way that changes the decision.
+- No text generated inside the world contradicts the debrief.
+
+### 11.4 Runtime validation result
+
+```ts
+type GenerationValidation = {
+  requiredFactsPresent: boolean;
+  forbiddenFactsAbsent: boolean;
+  continuityAcceptable: boolean;
+  reviewer: "manual" | "automated";
+  scoreEligible: boolean;
+  reasons: string[];
+};
+```
+
+For the hackathon, fallback clips are manually approved before submission. Live runs are assumed provisional unless the generated output passes the team’s rapid checklist. Never let the model self-certify its safety accuracy.
+
+---
+
+## 12. Fallback and Failure Design
+
+Every failure must preserve the narrative flow.
+
+| Failure | User-visible behavior | Scoring behavior |
+|---|---|---|
+| Token request fails | Show brief reconnecting state, then approved fallback | Unscored |
+| Connection fails | Start fallback orient clip | Unscored |
+| Reference image rejected | Use fallback for entire scenario | Unscored |
+| Prompt command rejected | Play matching branch fallback | Unscored |
+| Stream stalls | Crossfade to fallback at current state | Unscored |
+| Generation contradicts safety state | Stop live output and replace branch | Unscored |
+| Fallback asset missing | Show text consequence and debrief | Unscored |
+
+Requirements:
+
+- Fallback transition occurs within three seconds after a detected terminal failure.
+- The learner can still reach debrief and transfer states.
+- Display “Prepared continuation” rather than a technical error.
+- Record `generationMode: "fallback"` and `scoreEligible: false`.
+- Include a complete backup screen recording in the submission package.
+
+---
+
+## 13. Visual and Audio Direction
+
+### Visual language
+
+- Cinematic full-screen first-person scene.
+- Minimal controls during generated playback.
+- Dark neutral interface with amber warning accents and cool-blue counterfactual accents.
+- Large, high-contrast choice cards.
+- A thin timeline showing decision, chosen future, rewind, alternative, and lesson.
+- Avoid gore, visible injury, panic imagery, or sensationalized casualty simulation.
+
+### Signature rewind
+
+- Freeze on the decision image.
+- Reverse recent audio and overlay subtle streaks or particles.
+- Move the timeline marker backward.
+- Restore the original decision wording.
+- Show “Same warning. Different choice.”
+
+This transition is the product’s most memorable Interactive Media moment and deserves more polish than secondary screens.
+
+### Audio
+
+Required:
+
+- Alarm, muted environmental ambience, choice confirmation, rewind sound, and captions.
+
+Optional:
+
+- Fish Audio narration generated from prewritten, reviewed text.
+
+AI voice must not improvise emergency guidance.
+
+---
+
+## 14. Repository and Component Organization
+
+Recommended structure:
+
+```text
+app/
+  api/reactor-token/route.ts
+  page.tsx
+components/
+  ExperiencePlayer.tsx
+  DecisionOverlay.tsx
+  RewindTransition.tsx
+  Debrief.tsx
+  TransferCheck.tsx
+  GenerationStatus.tsx
+lib/
+  reactor/client.ts
+  reactor/events.ts
+  scenario/engine.ts
+  scenario/types.ts
+  scenario/scoring.ts
+scenarios/
+  structure-fire-v1.ts
+public/
+  references/
+  fallbacks/
+  audio/
+tests/
+  scenario-engine.test.ts
+  scoring.test.ts
+  state-machine.test.ts
+```
+
+Keep scenario content separate from UI components and Reactor adapters. No component should contain hardcoded safety classifications.
+
+---
+
+## 15. Three-Person Ownership and Code Division
+
+The team should use three durable ownership areas. Each member may review every area, but one person owns the implementation and integration decision for each file group.
+
+### Member A — Reactor and runtime integration
+
+**Primary outcome:** a reliable live world-model adapter that the player can treat as a small, typed service.
+
+**Own these files:**
+
+```text
+app/api/reactor-token/route.ts
+lib/reactor/client.ts
+lib/reactor/events.ts
+components/WorldViewport.tsx
+components/GenerationStatus.tsx
+public/fallbacks/*
+```
+
+**Implement:**
+
+- Server-side token exchange; never expose `REACTOR_API_KEY` to the browser.
+- LingBot World 2 connect, reference-image upload, fixed seed, prompt, start, pause, resume, and reset.
+- Typed event adapter for `image_accepted`, `prompt_accepted`, `generation_started`, `chunk_complete`, `generation_paused`, `generation_resumed`, and `command_error`.
+- Timeouts, one retry policy, and fallback switching.
+- Video viewport, loading state, stream-stalled state, and “prepared continuation” state.
+- Capture/restore of the decision frame used by rewind.
+- Reactor cost discipline: pause during overlays and reset after the alternative.
+
+**Does not own:** safety classifications, choice labels, scoring, or the main state machine.
+
+**Definition of done:** the frontend can call a small interface such as `startScenario`, `showConsequence`, `rewind`, `showAlternative`, and `useFallback` without knowing SDK event details.
+
+### Member B — Experience and interaction frontend
+
+**Primary outcome:** a polished, accessible seven-state interactive story that can run against a mock Reactor adapter.
+
+**Own these files:**
+
+```text
+app/page.tsx
+components/ExperiencePlayer.tsx
+components/EntryScreen.tsx
+components/DecisionOverlay.tsx
+components/RewindTransition.tsx
+components/Debrief.tsx
+components/TransferCheck.tsx
+components/ResultView.tsx
+components/ui/*
+lib/player/state-machine.ts
+```
+
+**Implement:**
+
+- Entry screen and featured-scenario start flow.
+- `entry → orient → decision → consequence → rewind → alternative → debrief → transfer → result` transitions.
+- Choice buttons, double-submit prevention, keyboard accessibility, captions, focus states, and reduced-motion mode.
+- Rewind animation and the “Same warning. Different choice.” moment.
+- Debrief cards, source link, prototype disclaimer, transfer UI, and result labels.
+- A mock `WorldModelAdapter` so the entire UI can be developed before Reactor is ready.
+
+**Does not own:** prompt text, safety labels, Reactor SDK calls, or scenario scoring rules.
+
+**Definition of done:** the complete experience works with fake timed events and can be switched to Member A’s adapter through dependency injection.
+
+### Member C — Scenario, safety, and measurement engine
+
+**Primary outcome:** immutable, source-grounded scenario data and deterministic scoring that cannot be changed by generated text.
+
+**Own these files:**
+
+```text
+scenarios/structure-fire-v1.ts
+scenarios/transfer-hotel-fire-v1.ts
+lib/scenario/types.ts
+lib/scenario/engine.ts
+lib/scenario/scoring.ts
+lib/scenario/validation.ts
+tests/scenario-engine.test.ts
+tests/scoring.test.ts
+```
+
+**Implement:**
+
+- Typed `DisasterPack`, `GeneratedScenario`, `ChoiceDefinition`, `ConsequenceDefinition`, and `SessionResult` contracts.
+- Structure-fire parameters: apartment/hotel/office, day/night, occupancy, blocked-exit/power-outage complication, and severity.
+- Warm-door decision, both consequence definitions, debrief copy, Red Cross citation, and hotel transfer scenario.
+- Allowed-parameter and forbidden-combination checks.
+- Prompt composition from approved fragments only.
+- Choice safety classification, transfer-success calculation, `improved` calculation, and score eligibility.
+- Unit tests for every result combination and invalid scenario case.
+
+**Does not own:** rendering, SDK calls, visual animation, or deployment configuration.
+
+**Definition of done:** Member B can render a complete scenario by importing a single scenario object, and the tests prove the safety engine is deterministic.
+
+### Shared integration responsibility
+
+All three members participate in a short integration check at the end of each build block. Member A owns runtime failures, Member B owns user-visible flow failures, and Member C owns scenario or scoring failures. No one silently changes another member’s contract; update the shared type first and notify the owner.
+
+---
+
+## 16. Keeping Code in Sync
+
+### Repository setup
+
+Use one shared Git repository with one protected `main` branch and short-lived feature branches. Do not develop directly on `main`.
+
+```text
+main                         always deployable
+feat/reactor-adapter         Member A
+feat/player-flow             Member B
+feat/scenario-engine         Member C
+fix/*                        any member, for a focused correction
+```
+
+Each member clones the repository once, configures the same Node version, and copies `.env.example` to `.env.local`. The real API key is never committed or pasted into chat, issues, screenshots, or the repository.
+
+### Shared source of truth
+
+The following files are contract files and require review from all three members:
+
+```text
+lib/scenario/types.ts
+lib/player/state-machine.ts
+lib/reactor/client.ts       # public adapter interface only
+package.json
+tsconfig.json
+```
+
+Keep SDK-specific types inside `lib/reactor/*`. Keep safety types inside `lib/scenario/*`. UI components consume interfaces and never import the Reactor SDK directly.
+
+### Branch and pull-request rules
+
+1. Create a focused branch from the latest `main`.
+2. Make one coherent change; avoid mixing formatting, dependency upgrades, and feature work.
+3. Run the local checks before pushing:
+
+   ```text
+   npm run lint
+   npm run typecheck
+   npm test
+   npm run build
+   ```
+
+4. Open a pull request with a short description, screenshots or a recording for UI changes, and a test result.
+5. Request review from at least one other member; contract-file changes require two reviewers when time permits.
+6. Squash-merge after review and pull the updated `main` before starting the next task.
+
+If the event timeline makes formal pull requests too slow, use the same branch rules and perform a two-minute verbal review before merging locally. Never force-push `main` or rewrite another member’s branch.
+
+### Integration cadence
+
+Use three synchronization points:
+
+- **Start of build:** everyone pulls `main`, confirms the current contract, and states their next branch.
+- **End of each 60–90 minute block:** each member pushes work, opens or updates a PR, and gives a 60-second demo or status.
+- **Before recording/submission:** freeze feature work, merge only fixes, deploy from `main`, and tag the exact submission commit.
+
+At every checkpoint, verify:
+
+- `npm run typecheck` passes.
+- The UI works with the mock adapter.
+- The live adapter still connects or falls back cleanly.
+- Scenario tests pass.
+- No secret or large generated asset was accidentally committed.
+
+### Contract-first collaboration
+
+Before parallel implementation, Member C commits the scenario types and Member B commits the adapter interface. Member A and Member B can then work independently against mocks.
+
+The minimum adapter interface is:
+
+```ts
+export type WorldModelAdapter = {
+  start(input: {
+    referenceImage: string;
+    prompt: string;
+    seed: number;
+    onFrame?: (frame: unknown) => void;
+  }): Promise<void>;
+  pause(): Promise<void>;
+  resume(): Promise<void>;
+  applyPrompt(prompt: string): Promise<void>;
+  reset(): Promise<void>;
+  useFallback(asset: string): Promise<void>;
+  onStatus(listener: (status: WorldModelStatus) => void): () => void;
+};
+```
+
+The UI depends on this interface, not on LingBot methods. Member A can replace the mock implementation without forcing Member B to rewrite the player.
+
+### Handling overlapping edits
+
+- Do not edit another member’s owned files unless they ask or a merge conflict requires it.
+- If two people need the same file, extract a new interface or helper into the owner’s area instead of editing the file simultaneously.
+- If a conflict occurs, the file owner resolves semantic conflicts; the other member explains the intended behavior and tests the result.
+- Never resolve a conflict by accepting “ours” or “theirs” blindly for contract files.
+- Keep commits small enough to cherry-pick or revert.
+
+### Shared communication format
+
+At each checkpoint, post:
+
+```text
+Done: <one sentence>
+Next: <one sentence>
+Blocked: <none or exact blocker>
+Contract change: <none or file + type/function>
+Demo status: <working / fallback / broken>
+```
+
+This prevents duplicate work and makes it obvious when an integration decision is needed.
+
+### Asset synchronization
+
+- Small reference images and approved fallback clips live under `public/` and are versioned.
+- Do not commit raw API recordings, caches, or temporary exports.
+- Use stable filenames such as `fire-bedroom-orient-v1.webm` and `fire-hotel-alternative-v1.webm`.
+- Record the source, seed, prompt version, and validation result in `public/fallbacks/manifest.json`.
+- The manifest is reviewed by Member A and Member C before the asset is used in a scored path.
+
+### Deployment synchronization
+
+- Only `main` deploys to the shared preview/production URL.
+- Every merge triggers a deployment or an explicit manual deploy from the merge commit.
+- Before recording, write down the deployed commit SHA and test that exact URL in an incognito window.
+- Keep the previous known-good deployment URL or recording available while making final changes.
+
+### Emergency merge protocol
+
+If the team is less than one hour from submission:
+
+1. Stop feature branches.
+2. Each member pushes unfinished work to their branch.
+3. Select one integration owner for the final merge.
+4. Merge only the smallest set of commits that satisfies acceptance criteria.
+5. Run typecheck, tests, build, and one complete browser flow.
+6. Deploy and record from that exact commit.
+
+Reliability, fallback, and a complete learning loop take priority over unfinished breadth features.
+
+---
+
+## 17. Build Schedule
+
+### Day 1: prove the live loop
+
+#### Setup block
+
+- Create repository and Next.js project.
+- Claim Reactor credits and create a local API key.
+- Configure local and deployment environment variables.
+- Run the Reactor sandbox and confirm account access.
+
+#### Core block
+
+- Render one live LingBot World 2 stream.
+- Implement the token route and event adapter.
+- Implement the entry, orient, decision, and one consequence state.
+- Hardcode the first approved scenario before building parameter generation.
+
+#### Day 1 exit criteria
+
+- Live scene appears from the reference image and prompt.
+- A choice can be submitted exactly once.
+- One branch runs live.
+- One branch can run from fallback.
+- No API key appears in browser code or repository history.
+
+### Day 2: complete, validate, and submit
+
+#### 08:00–10:30 — complete the learning loop
+
+- Implement both branch orders.
+- Implement the rewind transition.
+- Implement reset/reinitialization for the alternative.
+- Add all fallback paths.
+
+#### 10:30–12:00 — demonstrate platform breadth
+
+- Add apartment, hotel, and office parameters.
+- Add deterministic scenario composition.
+- Add debrief and transfer check.
+- Add result semantics and local session record.
+
+#### 12:00–13:30 — verify
+
+- Run the complete test matrix.
+- Repeat live generation for each branch.
+- Replace unreliable output with approved fallback assets.
+- Test deployed build from a separate browser.
+
+#### 13:30–14:30 — record
+
+- Record the primary 90–120 second demo.
+- Record a second clean backup take.
+- Capture a short raw clip proving live navigation and prompt response.
+
+#### 14:30–15:15 — submit
+
+- Finish Devfolio fields.
+- Add repository and deployment links.
+- Add source attribution and known limitations.
+- Verify that every submitted link opens without team credentials.
+
+#### Final buffer
+
+- Fix only submission-blocking or demo-blocking defects.
+- Do not add a second disaster pack, accounts, or personalization.
+
+---
+
+## 18. Test Plan
+
+### 17.1 Unit tests
+
+- Allowed scenario parameters produce a scenario.
+- Unsupported values are rejected.
+- Forbidden combinations are rejected.
+- Every decision has at least two choices.
+- Every choice references an existing consequence.
+- Every approved scenario contains a source.
+- Recommended choices match the controlled safety rule.
+- Improvement and transfer-success semantics match the result table.
+- Fallback generation always sets `scoreEligible` to false.
+
+### 17.2 State-machine tests
+
+- Entry can transition only to orient.
+- Orient cannot become decision until generation starts or fallback is ready.
+- Decision accepts only one choice.
+- Consequence uses the submitted choice.
+- Rewind returns to the same controlled decision context.
+- Alternative always uses the opposite choice.
+- Debrief appears only after both futures.
+- Result appears only after a transfer choice.
+- Errors transition to fallback rather than a dead end.
+
+### 17.3 Reactor integration tests
+
+- Valid token connects successfully.
+- Start is not sent before image and prompt acceptance.
+- Prompt updates take effect only after confirmation.
+- Movement is explicitly returned to idle when decision overlays appear.
+- Pause, resume, and reset events update UI state.
+- Command errors invoke the correct fallback.
+- Timeout behavior is deterministic.
+
+### 17.4 Experience scenarios
+
+Run at least three times each:
+
+1. Unsafe initial choice → safe transfer.
+2. Unsafe initial choice → unsafe transfer.
+3. Safe initial choice → safe transfer.
+4. Safe initial choice → unsafe transfer.
+5. Live chosen branch → live alternative.
+6. Live chosen branch → fallback alternative.
+7. Fallback chosen branch → fallback alternative.
+8. Reduced-motion and keyboard-only navigation.
+
+### 17.5 User validation
+
+With at least five convenience-test participants:
+
+- Ask the participant to complete the experience without coaching.
+- Record the initial and transfer choices.
+- Ask them to state the learned rule unaided.
+- Ask whether the two futures felt meaningfully different.
+- Ask whether rewind made the cause-and-effect relationship clearer.
+- Treat inability to recall the principle as failure even if the participant enjoyed the visuals.
+
+Do not present a tiny convenience sample as proof of efficacy. Report it only as preliminary usability evidence.
+
+### 17.6 Acceptance criteria
+
+The MVP is complete only when:
+
+- The deployed experience completes in under three minutes.
+- Both initial-choice orders work.
+- Every learner sees both futures.
+- Rewind reliably restores the decision context.
+- Transfer scoring handles all four semantic cases.
+- Failure paths reach fallback within three seconds.
+- No run with fallback or contradiction is scored.
+- Safety copy and source link are visible.
+- A non-team tester can state the warm-door rule unaided.
+- A remote judge can understand the product from the recording without narration from the team.
+
+---
+
+## 19. Demo Script
+
+Target length: 90–120 seconds.
+
+### Opening — 10 seconds
+
+“Most disaster education asks whether you watched the instructions. We ask whether your next decision becomes safer.”
+
+### Live world — 15 seconds
+
+Start the featured scenario and briefly look around to prove that the environment is generated and responsive.
+
+### Decision and first future — 20 seconds
+
+Reveal the warm-door cue. Choose “Open the door.” Show the unsafe scripted consequence.
+
+### Counterfactual — 20 seconds
+
+Trigger the rewind. Show “Same warning. Different choice.” Run the keep-closed alternative.
+
+### Learning and transfer — 20 seconds
+
+Show the sourced causal debrief, then switch to the hotel transfer scenario and choose the safer response.
+
+### Architecture and close — 15 seconds
+
+“Reactor renders each future. A deterministic scenario pack owns the safety rule and scoring. The same engine can generate many reviewed environments and complications without allowing AI to invent emergency advice.”
+
+Close with:
+
+> Open-ended situations. Constrained decisions. Controlled safety truth.
+
+---
+
+## 20. Submission Specification
+
+### Required assets
+
+- Public deployment URL.
+- Public or judge-accessible source repository.
+- 90–120 second primary demo recording.
+- Backup full-flow recording.
+- Project description and track selection.
+- Tool and API attribution.
+- Red Cross source attribution.
+- Setup instructions and environment-variable names.
+- Known limitations and safety disclaimer.
+
+### Recommended project description
+
+> Counterfactual Disaster Trainer is a world-model-powered interactive media experience for practicing high-stakes civilian decisions. It generates varied disaster situations from reviewed scenario packs, presents a small number of controlled choices, renders the selected consequence, rewinds to show the alternative, and tests whether the learner applies the principle in a new environment. Reactor generates the worlds; deterministic rules own safety and scoring.
+
+### Known limitations
+
+- The hackathon build includes one reviewed fire principle, not every disaster family shown on the roadmap.
+- Generated visuals may drift or contradict controlled state.
+- Contradictory and fallback runs are not scored.
+- Counterfactuals are guided visualizations, not physically exact forecasts.
+- The prototype has not undergone a formal efficacy study or professional certification.
+
+---
+
+## 21. Risk Register
+
+| Risk | Likelihood | Impact | Mitigation |
+|---|---:|---:|---|
+| Live generation latency | High | High | Pause strategically, hide restarts behind rewind, bundle approved fallbacks. |
+| Visual contradiction | Medium | High | Required/forbidden prompt facts, manual review, immediate fallback, unscored run. |
+| API credits exhausted | Medium | High | Pause when overlays are active, minimize concurrent sessions, use fallbacks during QA. |
+| Rewind lacks continuity | Medium | Medium | Capture decision frame, reuse reference image and seed, describe it as contextual rather than frame-exact. |
+| Team overbuilds scenario breadth | High | High | One playable pack; breadth demonstrated through parameters and non-playable roadmap cards. |
+| Safety claim exceeds evidence | Medium | High | Clear prototype disclaimer, authoritative source, reviewer step, no certification claims. |
+| Remote deployment fails | Medium | High | Test anonymous access, keep a backup recording, verify all links before submission. |
+| Partner integration distracts team | Medium | Medium | Fish Audio is optional and begins only after core acceptance criteria pass. |
+
+---
+
+## 22. Explicit Scope
+
+### In scope for the hackathon
+
+- Interactive Media experience.
+- One structure-fire disaster pack.
+- Multiple generated environments within that pack.
+- One controlled pivotal decision.
+- Two consequence futures.
+- Rewind and counterfactual replay.
+- One transfer check.
+- Deterministic safety and scoring.
+- Live Reactor integration.
+- Approved fallback media.
+- Source attribution and disclaimer.
+
+### Out of scope
+
+- Fully open-ended actions.
+- AI-generated safety rules or scoring.
+- Multiple completed disaster families.
+- Claims of exact physical simulation.
+- Photo personalization or digital twins.
+- Speech-to-text or conversational agents.
+- Multiplayer or VR.
+- Institutional dashboards, certificates, or rankings.
+- Authentication, payments, production analytics, or a persistent backend database.
+- Certified or professionally validated training claims.
+
+---
+
+## 23. Post-Hackathon Roadmap
+
+### Phase 1 — Scenario authoring foundation
+
+- Build a reviewer-facing disaster-pack editor.
+- Add schema validation and versioning.
+- Add source and review-status workflows.
+- Create automated prompt consistency checks.
+
+### Phase 2 — Additional disaster packs
+
+- Add earthquake, flood, wildfire, and cyclone packs one principle at a time.
+- Partner with domain reviewers.
+- Publish only approved combinations.
+
+### Phase 3 — Better validation
+
+- Add automated frame sampling and visual contradiction detection.
+- Compare required and forbidden facts against generated output.
+- Maintain generation-quality metrics by model and scenario version.
+
+### Phase 4 — Learning evaluation
+
+- Run controlled studies comparing counterfactual replay with passive instruction.
+- Measure transfer decisions and unaided rule recall.
+- Separate usability results from efficacy claims.
+
+### Phase 5 — Distribution
+
+- Add institutional scenario collections and localization.
+- Add accessibility variants.
+- Introduce aggregate, privacy-preserving reporting only when it benefits learners and reviewers.
+
+---
+
+## 24. Final Decisions and Assumptions
+
+- The submission is for the **Interactive Media** track.
+- The team participates **online** with **3–4 active builders**.
+- No code exists at the start.
+- The hackathon implementation uses **Next.js and TypeScript** with no separate backend service beyond the token route.
+- **LingBot World 2 through Reactor** is the primary world model.
+- The user receives **two choices** at the MVP decision and never supplies a scored free-text action.
+- Scenario breadth is achieved through **validated compositional parameters**, not unrestricted safety generation.
+- Only the **structure-fire** pack is playable and scored during the hackathon.
+- The apartment-fire warm-door principle is grounded in the linked American Red Cross guidance.
+- A fixed seed and reference image improve continuity but do not guarantee identical replay.
+- Any live contradiction, timeout, or fallback makes the session unscored.
+- Local state is sufficient for the hackathon; persistent analytics are postponed.
+- Fish Audio narration is optional and cannot block submission.
+- The final experience is framed as an experimental preparedness-practice prototype.
+
+---
+
+## 25. Immediate Checklist
+
+- [ ] Create the Next.js repository and deployment project.
+- [ ] Claim Reactor credits and verify LingBot World 2 access.
+- [ ] Implement the server-side token route.
+- [ ] Confirm a live reference-image-and-prompt generation.
+- [ ] Freeze the `structure-fire-v1` scenario data.
+- [ ] Build the seven experience states and result state.
+- [ ] Implement chosen-first and counterfactual-second ordering.
+- [ ] Capture the decision frame and build the rewind transition.
+- [ ] Implement reset/reinitialization for the alternative.
+- [ ] Add the hotel transfer scenario.
+- [ ] Add scoring and score-eligibility rules.
+- [ ] Generate and approve fallback assets.
+- [ ] Run the complete test matrix.
+- [ ] Conduct uncoached user tests and unaided rule recall.
+- [ ] Record primary and backup demos.
+- [ ] Complete Devfolio submission and verify all public links.

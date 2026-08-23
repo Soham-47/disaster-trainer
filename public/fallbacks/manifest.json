@@ -1,0 +1,30 @@
+{
+  "version": "1.0.0",
+  "disasterPack": "structure-fire-v1",
+  "fallbacks": {
+    "orient": {
+      "asset": "/fallbacks/fire-bedroom-orient.mp4",
+      "durationSeconds": 12,
+      "description": "Bedroom scene with smoke visible under closed exit door and alarm sounding.",
+      "validated": true
+    },
+    "unsafe_hallway": {
+      "asset": "/fallbacks/fire-hallway-unsafe.mp4",
+      "durationSeconds": 15,
+      "description": "Opening warm door reveals heavy smoke in hallway requiring immediate retreat.",
+      "validated": true
+    },
+    "safe_shelter": {
+      "asset": "/fallbacks/fire-shelter-safe.mp4",
+      "durationSeconds": 15,
+      "description": "Door kept closed, towel placed at gap, calling emergency services from window.",
+      "validated": true
+    },
+    "transfer_hotel": {
+      "asset": "/fallbacks/fire-hotel-transfer.mp4",
+      "durationSeconds": 12,
+      "description": "Hotel room environment with warm exit door transfer scenario.",
+      "validated": true
+    }
+  }
+}
