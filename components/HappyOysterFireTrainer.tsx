@@ -19,6 +19,7 @@ import {
   fireTrainingReducer,
   scoreFireTraining,
 } from "@/lib/fire-training/reducer";
+import { preparedAssetForFireAction } from "@/lib/fire-training/visual-continuation";
 
 type SessionResponse = { token: string; worldId: string } | { error: string; message: string };
 
@@ -44,7 +45,9 @@ export function HappyOysterFireTrainer() {
   const [hintVisible, setHintVisible] = useState(false);
   const [pointerLocked, setPointerLocked] = useState(false);
   const [visualValid, setVisualValid] = useState(true);
+  const [preparedAsset, setPreparedAsset] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const preparedVideoRef = useRef<HTMLVideoElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const clientRef = useRef<HappyOysterFireClient | null>(null);
   const keysRef = useRef(new Set<string>());
@@ -82,19 +85,21 @@ export function HappyOysterFireTrainer() {
 
   useEffect(() => {
     if (worldStatus !== "error" && worldStatus !== "ended") return;
+    if (preparedAsset || !visualValid) return;
     if (["briefing", "debrief", "error"].includes(training.stage)) return;
     const message = worldStatus === "ended"
       ? "The live travel ended before the training loop was complete. Restart the scenario to continue."
       : "The live world connection failed during the scenario. Restart to continue safely.";
     setError(message);
     dispatch({ type: "FAIL", message });
-  }, [training.stage, worldStatus]);
+  }, [preparedAsset, training.stage, visualValid, worldStatus]);
 
   const start = useCallback(async () => {
     if (!videoRef.current || busy) return;
     setBusy(true);
     setError(null);
     setVisualValid(true);
+    setPreparedAsset(null);
     try {
       const response = await fetch("/api/happy-oyster-session", { method: "POST" });
       const data = (await response.json()) as SessionResponse;
@@ -111,26 +116,45 @@ export function HappyOysterFireTrainer() {
   }, [attachClient, busy]);
 
   const performAction = useCallback(async (action: ReviewedFireAction) => {
-    if (busy || !actions.includes(action) || worldStatus !== "live") return;
+    if (busy || !actions.includes(action) || (worldStatus !== "live" && !preparedAsset)) return;
     setBusy(true);
     setError(null);
     setHintVisible(false);
     stopControls();
     try {
-      if (action === "OpenDoor") await clientRef.current?.approachAndInteract(action);
-      else if (MODEL_ACTIONS.has(action)) await clientRef.current?.interact(action);
+      const result = action === "OpenDoor"
+        ? await clientRef.current?.approachAndInteract(action)
+        : MODEL_ACTIONS.has(action)
+          ? await clientRef.current?.interact(action)
+          : undefined;
+      const prepared = preparedAssetForFireAction(action);
+      if (result && !result.visualConfirmed && prepared) {
+        setPreparedAsset(prepared);
+        setVisualValid(false);
+        setError(`${result.visualReason} Showing the prepared consequence; this run is not score eligible.`);
+      }
       dispatch({ type: "SUBMIT_ACTION", action });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The live interaction failed.");
+      if (MODEL_ACTIONS.has(action)) {
+        const prepared = preparedAssetForFireAction(action);
+        if (prepared) setPreparedAsset(prepared);
+        setVisualValid(false);
+        setError(`${cause instanceof Error ? cause.message : "The live interaction failed."} Showing the prepared consequence; this run is not score eligible.`);
+        dispatch({ type: "SUBMIT_ACTION", action });
+      } else {
+        setError(cause instanceof Error ? cause.message : "The live interaction failed.");
+      }
     } finally {
       setBusy(false);
     }
-  }, [actions, busy, stopControls, worldStatus]);
+  }, [actions, busy, preparedAsset, stopControls, worldStatus]);
 
   const replayAlternative = useCallback(async () => {
     if (training.stage !== "outcome" || busy) return;
     setBusy(true);
     setError(null);
+    setPreparedAsset(null);
+    setVisualValid(true);
     stopControls();
     dispatch({ type: "START_COUNTERFACTUAL" });
     try {
@@ -153,7 +177,7 @@ export function HappyOysterFireTrainer() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!active || worldStatus !== "live") return;
+      if (!active || (worldStatus !== "live" && !preparedAsset)) return;
       const key = event.key.toLowerCase();
       if (["w", "a", "s", "d"].includes(key)) {
         event.preventDefault();
@@ -189,7 +213,7 @@ export function HappyOysterFireTrainer() {
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", stopControls);
     };
-  }, [actions, active, performAction, stopControls, worldStatus]);
+  }, [actions, active, performAction, preparedAsset, stopControls, worldStatus]);
 
   useEffect(() => {
     const onPointerLock = () => setPointerLocked(document.pointerLockElement === viewportRef.current);
@@ -227,8 +251,20 @@ export function HappyOysterFireTrainer() {
           autoPlay
           muted
           playsInline
-          className={`h-full w-full object-cover transition-opacity duration-700 ${worldStatus === "live" ? "opacity-100" : "opacity-0"}`}
+          className={`h-full w-full object-cover transition-opacity duration-700 ${worldStatus === "live" && !preparedAsset ? "opacity-100" : "opacity-0"}`}
         />
+        {preparedAsset && (
+          <video
+            key={preparedAsset}
+            ref={preparedVideoRef}
+            src={preparedAsset}
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        )}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_45%,rgba(0,0,0,.62)_100%)]" />
         <div className="absolute inset-x-0 bottom-0 h-56 bg-gradient-to-t from-black/85 to-transparent" />
       </div>
@@ -239,9 +275,9 @@ export function HappyOysterFireTrainer() {
           <h1 className="mt-2 text-xl font-semibold tracking-tight md:text-3xl">{copy.priority}</h1>
           {active && <p className="mt-2 max-w-lg text-sm text-white/70">{copy.prompt}</p>}
         </div>
-        <div className={`rounded-full border px-3 py-1.5 text-[10px] font-bold tracking-[.18em] backdrop-blur-md ${worldStatus === "live" ? "border-emerald-400/40 bg-emerald-950/55 text-emerald-200" : worldStatus === "error" ? "border-red-400/40 bg-red-950/60 text-red-200" : "border-white/15 bg-black/45 text-white/65"}`}>
-          <span className={`mr-2 inline-block size-1.5 rounded-full ${worldStatus === "live" ? "animate-pulse bg-emerald-400" : "bg-white/40"}`} />
-          {statusLabel(displayedStatus)}
+        <div className={`rounded-full border px-3 py-1.5 text-[10px] font-bold tracking-[.18em] backdrop-blur-md ${preparedAsset ? "border-amber-400/40 bg-amber-950/60 text-amber-200" : worldStatus === "live" ? "border-emerald-400/40 bg-emerald-950/55 text-emerald-200" : worldStatus === "error" ? "border-red-400/40 bg-red-950/60 text-red-200" : "border-white/15 bg-black/45 text-white/65"}`}>
+          <span className={`mr-2 inline-block size-1.5 rounded-full ${preparedAsset ? "bg-amber-400" : worldStatus === "live" ? "animate-pulse bg-emerald-400" : "bg-white/40"}`} />
+          {preparedAsset ? "PREPARED CONTINUATION" : statusLabel(displayedStatus)}
         </div>
       </header>
 
@@ -287,7 +323,7 @@ export function HappyOysterFireTrainer() {
             {actions.length > 0 && (
               <div className="flex w-full justify-center gap-3">
                 {actions.map((action, index) => (
-                  <button key={action} disabled={busy || worldStatus !== "live"} onClick={(event) => { event.stopPropagation(); void performAction(action); }} className="group min-w-0 flex-1 rounded-2xl border border-white/15 bg-black/65 px-4 py-4 text-left backdrop-blur-xl transition hover:border-orange-300/60 hover:bg-black/80 disabled:opacity-40 md:max-w-sm">
+                  <button key={action} disabled={busy || (worldStatus !== "live" && !preparedAsset)} onClick={(event) => { event.stopPropagation(); void performAction(action); }} className="group min-w-0 flex-1 rounded-2xl border border-white/15 bg-black/65 px-4 py-4 text-left backdrop-blur-xl transition hover:border-orange-300/60 hover:bg-black/80 disabled:opacity-40 md:max-w-sm">
                     <span className="mr-3 inline-grid size-7 place-items-center rounded-full border border-white/20 text-xs text-white/55">{index + 1}</span>
                     <span className="font-semibold">{FIRE_ACTION_LABELS[action]}</span>
                     {index === 0 && <span className="float-right mt-1 text-[10px] font-bold tracking-widest text-orange-300/70">E</span>}

@@ -28,6 +28,18 @@ export type FireWorldStatus =
   | "ended"
   | "error";
 
+export type FireInteractionOptions = {
+  timeoutMs?: number;
+};
+
+export type FireInteractionResult = {
+  providerAction: string;
+  visualConfirmed: false;
+  visualReason: string;
+};
+
+const DEFAULT_INTERACTION_TIMEOUT_MS = 4_000;
+
 const PROVIDER_ACTION_ALIASES: Partial<Record<ReviewedFireAction, string[]>> = {
   OpenDoor: ["OpenDoor", "open_close_door", "open_door"],
   CloseDoor: ["CloseDoor", "open_close_door", "close_door"],
@@ -140,7 +152,7 @@ export class HappyOysterFireClient {
     if (this.model && this.status === "live") await this.model.stop();
   }
 
-  async interact(action: ReviewedFireAction) {
+  async interact(action: ReviewedFireAction, options: FireInteractionOptions = {}): Promise<FireInteractionResult> {
     if (!REVIEWED_FIRE_ACTIONS.includes(action)) {
       throw new Error(`Interaction "${action}" is not reviewed for this scenario.`);
     }
@@ -150,16 +162,34 @@ export class HappyOysterFireClient {
     if (!providerAction) {
       throw new Error(`Interaction "${action}" is not available in the attached world.`);
     }
-    await this.model.interact(providerAction);
-    await new Promise((resolve) => setTimeout(resolve, 280));
-    await this.model.release({ interaction: true });
+    const timeoutMs = options.timeoutMs ?? DEFAULT_INTERACTION_TIMEOUT_MS;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        (async () => {
+          await this.model!.interact(providerAction);
+          await new Promise((resolve) => setTimeout(resolve, 280));
+          await this.model!.release({ interaction: true });
+        })(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(`Interaction "${action}" timed out after ${timeoutMs}ms.`)), timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+    return {
+      providerAction,
+      visualConfirmed: false,
+      visualReason: "Happy Oyster accepted the interaction, but it does not expose object-level door state for visual confirmation.",
+    };
   }
 
-  async approachAndInteract(action: ReviewedFireAction, approachMs = 900) {
+  async approachAndInteract(action: ReviewedFireAction, approachMs = 900, options: FireInteractionOptions = {}) {
     await this.move("Front");
     if (approachMs > 0) await new Promise((resolve) => setTimeout(resolve, approachMs));
     await this.releaseMovement();
-    await this.interact(action);
+    return this.interact(action, options);
   }
 
   async restartTravel() {

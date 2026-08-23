@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { calls, streamState, events, FakeHappyOysterModel } = vi.hoisted(() => {
+const { calls, streamState, interactionState, events, FakeHappyOysterModel } = vi.hoisted(() => {
   const hoistedCalls: Array<[string, unknown?]> = [];
   const hoistedStreamState = { streaming: true };
+  const hoistedInteractionState = { mode: "resolve" as "resolve" | "reject" | "hang" };
   const hoistedEvents: {
     phase?: (phase: string) => void;
     travelStatus?: (status: string) => void;
@@ -66,7 +67,11 @@ const { calls, streamState, events, FakeHappyOysterModel } = vi.hoisted(() => {
 
     async move(value: string) { hoistedCalls.push(["move", value]); }
     async look(value: string) { hoistedCalls.push(["look", value]); }
-    async interact(value: string) { hoistedCalls.push(["interact", value]); }
+    async interact(value: string) {
+      hoistedCalls.push(["interact", value]);
+      if (hoistedInteractionState.mode === "reject") throw new Error("provider interaction failed");
+      if (hoistedInteractionState.mode === "hang") await new Promise(() => undefined);
+    }
     async control(value: unknown) { hoistedCalls.push(["control", value]); }
     async release(value: unknown) { hoistedCalls.push(["release", value]); }
     async stop() { hoistedCalls.push(["stop"]); }
@@ -77,6 +82,7 @@ const { calls, streamState, events, FakeHappyOysterModel } = vi.hoisted(() => {
   return {
     calls: hoistedCalls,
     streamState: hoistedStreamState,
+    interactionState: hoistedInteractionState,
     events: hoistedEvents,
     FakeHappyOysterModel: HoistedFakeHappyOysterModel,
   };
@@ -90,6 +96,7 @@ describe("HappyOysterFireClient", () => {
   beforeEach(() => {
     calls.length = 0;
     streamState.streaming = true;
+    interactionState.mode = "resolve";
   });
 
   it("attaches the reviewed world and becomes live only after streaming starts", async () => {
@@ -133,6 +140,24 @@ describe("HappyOysterFireClient", () => {
     expect(calls).toContainEqual(["release", { translation: true }]);
     expect(calls.filter(([name]) => name === "startTravel")).toHaveLength(2);
     expect(calls).toContainEqual(["endTravelSession"]);
+  });
+
+  it("reports door interactions as visually unconfirmed when the provider has no object state", async () => {
+    const client = new HappyOysterFireClient();
+    await client.start({ token: "jwt", worldId: "fire-world", videoElement: {} as HTMLVideoElement });
+
+    await expect(client.interact("OpenDoor")).resolves.toMatchObject({
+      providerAction: "open_close_door",
+      visualConfirmed: false,
+    });
+  });
+
+  it("times out a stuck provider interaction so the trainer can choose its prepared continuation", async () => {
+    interactionState.mode = "hang";
+    const client = new HappyOysterFireClient();
+    await client.start({ token: "jwt", worldId: "fire-world", videoElement: {} as HTMLVideoElement });
+
+    await expect(client.interact("OpenDoor", { timeoutMs: 20 })).rejects.toThrow("timed out");
   });
 
   it("exposes terminal travel states so the trainer can recover", async () => {
