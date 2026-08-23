@@ -50,10 +50,14 @@ export function createSimulationState(): SimulationState {
 }
 
 function statusForNode(graph: EpisodeGraph, nodeId: string): WorldState["status"] {
-  const kind = graph.nodes[nodeId]?.kind;
+  const node = graph.nodes[nodeId];
+  const kind = node?.kind;
   if (kind === "debrief") return "debrief";
   if (kind === "transfer") return "transfer";
-  if (kind === "complete") return "complete";
+  // A complete-kind node may still be a visible outcome checkpoint with one
+  // final interaction (for example, “Open the debrief”). Keep it interactive
+  // until that exit is taken; only terminal complete nodes end the simulation.
+  if (kind === "complete" && (node?.interactions.length ?? 0) === 0) return "complete";
   return "active";
 }
 
