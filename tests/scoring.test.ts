@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { scoreSession } from "../lib/scenario/scoring";
+import { scoreSimulation } from "../lib/scenario/scoring";
+import type { SimulationState } from "../lib/player/simulation-reducer";
 import type { ChoiceDefinition } from "../lib/scenario/types";
 
 const safeChoice: ChoiceDefinition = {
@@ -51,5 +53,22 @@ describe("session scoring", () => {
     expect(result.generationValidated).toBe(false);
     expect(result.scoreEligible).toBe(false);
   });
-});
 
+  it("scores improvement when an unsafe primary action is followed by a safe transfer action", () => {
+    const primary = {
+      world: { discoveredCueIds: ["cue"], hazardLevels: { smoke: 4 }, availableResources: ["phone"], hintsUsed: 0 },
+      eventLog: [{ kind: "action", sequence: 1, nodeId: "decision", actionId: "unsafe", safetyClass: "unsafe" }],
+    } as unknown as SimulationState;
+    const transfer = {
+      world: { discoveredCueIds: ["cue"], hazardLevels: { smoke: 1 }, availableResources: ["phone"], hintsUsed: 0 },
+      eventLog: [{ kind: "action", sequence: 1, nodeId: "decision", actionId: "safe", safetyClass: "safe" }],
+    } as unknown as SimulationState;
+
+    const result = scoreSimulation(primary, transfer, true);
+
+    expect(result.transferSuccessful).toBe(true);
+    expect(result.improved).toBe(true);
+    expect(result.scoreEligible).toBe(true);
+    expect(result.overall).toBeGreaterThan(0);
+  });
+});

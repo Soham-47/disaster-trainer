@@ -1,8 +1,8 @@
 "use client";
 
-import { ExperiencePlayer } from "@/components/ExperiencePlayer";
+import { SimulationPlayer } from "@/components/SimulationPlayer";
 
 export default function CounterfactualDisasterTrainerPage() {
-  return <ExperiencePlayer />;
+  return <SimulationPlayer />;
 }
 

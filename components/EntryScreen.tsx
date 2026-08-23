@@ -19,7 +19,7 @@ export function EntryScreen({ onStart, disabled = false, errorMessage = null }: 
         See the choice. Then see the other future.
       </h1>
       <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-neutral-300">
-        Describe a disaster situation, make one constrained decision, experience its consequence, rewind, and test what you learned in a new setting.
+        Describe a reviewed disaster situation, explore it in first person, investigate warning cues, take constrained actions, experience the consequence, rewind the pivotal moment, and test what you learned in a new setting.
       </p>
       <div className="mx-auto mt-8 max-w-2xl text-left">
         <label htmlFor="scenario-brief" className="text-xs font-mono uppercase tracking-[0.2em] text-neutral-400">
@@ -36,7 +36,7 @@ export function EntryScreen({ onStart, disabled = false, errorMessage = null }: 
           disabled={disabled}
         />
         <div className="mt-2 flex justify-between gap-4 text-xs text-neutral-500">
-          <span>Starter library: fire, earthquake, flood, wildfire, and cyclone. Safety choices stay controlled.</span>
+          <span>Starter library: fire, earthquake, flood, wildfire, and cyclone. Safety outcomes stay controlled while your actions stay interactive.</span>
           <span>{brief.length}/{MAX_SCENARIO_BRIEF_LENGTH}</span>
         </div>
       </div>

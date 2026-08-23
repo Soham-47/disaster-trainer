@@ -45,7 +45,7 @@ export type WorldModelAdapter = {
   resume(): Promise<void>;
   applyPrompt(prompt: string): Promise<void>;
   reset(): Promise<void>;
-  useFallback(asset: string): Promise<void>;
+  useFallback(asset: string, reason?: string): Promise<void>;
   setNavigation(input: WorldModelNavigationInput): Promise<void>;
   stopNavigation(): Promise<void>;
   applySceneDelta(scene: SceneSpec): Promise<void>;

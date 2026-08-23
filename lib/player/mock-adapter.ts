@@ -95,7 +95,7 @@ export class MockWorldModelAdapter implements WorldModelAdapter {
     this.setStatus("idle");
   }
 
-  async useFallback(asset: string): Promise<void> {
+  async useFallback(asset: string, _reason?: string): Promise<void> {
     this.mode = "fallback";
     this.fallbackAsset = asset;
     this.frameCallback?.(null);

@@ -136,7 +136,7 @@ export function simulationReducer(state: SimulationState, action: SimulationActi
     case "START_TRANSFER": {
       return {
         graph: action.graph,
-        world: { ...createWorld(action.graph, action.resources), status: "transfer" },
+        world: createWorld(action.graph, action.resources),
         checkpoints: {},
         eventLog: [],
         errorMessage: null,
