@@ -4,10 +4,42 @@
 
 @layer base {
   body {
-    background-color: #0a0a0a;
+    background-color: #080604;
     color: #f5f5f5;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    font-family: "Avenir Next", "Segoe UI Variable", "Segoe UI", Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-feature-settings: "ss01" 1, "cv11" 1;
+    letter-spacing: -0.01em;
     min-height: 100vh;
+  }
+}
+
+@layer components {
+  .trainer-start {
+    background: radial-gradient(circle at 50% 42%, rgb(92 50 18 / .32), transparent 48%), #080604;
+  }
+
+  .trainer-glass {
+    border: 1px solid rgb(255 255 255 / .14);
+    background: linear-gradient(135deg, rgb(25 20 15 / .82), rgb(8 6 4 / .72));
+    box-shadow: 0 24px 80px rgb(0 0 0 / .32), inset 0 1px rgb(255 255 255 / .08);
+    backdrop-filter: blur(22px) saturate(130%);
+  }
+
+  .trainer-kicker {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .24em;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+
+  .trainer-display {
+    font-family: "Avenir Next", "Segoe UI Variable", "Segoe UI", Inter, system-ui, sans-serif;
+    letter-spacing: -.035em;
+  }
+
+  .trainer-action {
+    box-shadow: inset 0 1px rgb(255 255 255 / .07);
   }
 }
 

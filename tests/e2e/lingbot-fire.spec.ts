@@ -27,4 +27,26 @@ test.describe("LingBot apartment-fire trainer", () => {
     expect(bounds).not.toBeNull();
     expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
   });
+
+  test("keeps the live world full-screen behind the action dock", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto("/?mockWorld=1");
+    await page.getByRole("button", { name: "Begin scenario" }).click();
+    await expect(page.getByText("Orient before moving")).toBeVisible({ timeout: 10_000 });
+
+    const shell = page.getByTestId("trainer-shell");
+    const viewport = page.getByTestId("lingbot-viewport");
+    const video = page.getByTestId("lingbot-live-video");
+    const actionDock = page.getByTestId("action-dock");
+    const shellBox = await shell.boundingBox();
+    const viewportBox = await viewport.boundingBox();
+    const videoBox = await video.boundingBox();
+    const dockBox = await actionDock.boundingBox();
+
+    expect(shellBox?.height).toBeGreaterThanOrEqual(720);
+    expect(viewportBox?.height).toBeGreaterThan(600);
+    expect(videoBox?.width).toBeGreaterThan(1200);
+    expect(videoBox?.height).toBeGreaterThan(600);
+    expect(dockBox?.y).toBeGreaterThan((viewportBox?.y ?? 0) + 400);
+  });
 });

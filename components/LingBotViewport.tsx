@@ -53,7 +53,7 @@ export function LingBotViewport({ stream, phase, transitionFrame, transitionLabe
     };
   }, [stream, onCaptureReady, onVideoReady]);
   const showTransition = Boolean(transitionFrame && transitionPhases.has(phase));
-  return <div className="relative h-full min-h-[480px] w-full overflow-hidden bg-black">
+  return <div data-testid="lingbot-viewport" className="relative h-full min-h-0 w-full overflow-hidden bg-black">
     <video ref={videoRef} data-testid="lingbot-live-video" autoPlay playsInline muted className={`absolute inset-0 h-full w-full object-cover ${videoReady && !showTransition ? "opacity-100" : "opacity-0"}`} />
     {showTransition && <div data-testid="lingbot-transition-frame" className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${transitionFrame})` }} />}
     {!videoReady && !showTransition && <div data-testid="lingbot-loading" className="absolute inset-0 bg-black" />}
