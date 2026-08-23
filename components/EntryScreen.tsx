@@ -3,9 +3,13 @@
 import { useState } from "react";
 import { MAX_SCENARIO_BRIEF_LENGTH } from "@/lib/scenario/prompt";
 
-type EntryScreenProps = { onStart: (brief: string) => void; disabled?: boolean };
+type EntryScreenProps = {
+  onStart: (brief: string) => void;
+  disabled?: boolean;
+  errorMessage?: string | null;
+};
 
-export function EntryScreen({ onStart, disabled = false }: EntryScreenProps) {
+export function EntryScreen({ onStart, disabled = false, errorMessage = null }: EntryScreenProps) {
   const [brief, setBrief] = useState("");
 
   return (
@@ -36,13 +40,20 @@ export function EntryScreen({ onStart, disabled = false }: EntryScreenProps) {
           <span>{brief.length}/{MAX_SCENARIO_BRIEF_LENGTH}</span>
         </div>
       </div>
+      {errorMessage ? (
+        <div role="alert" className="mx-auto mt-6 max-w-2xl rounded-xl border border-rose-400/40 bg-rose-950/60 p-4 text-left">
+          <p className="text-xs font-mono uppercase tracking-[0.2em] text-rose-200">Live connection failed</p>
+          <p className="mt-2 text-sm leading-6 text-rose-100">{errorMessage}</p>
+          <p className="mt-2 text-xs text-rose-100/70">LingBot must publish a live first-person video before the scenario can begin. Check the connection and retry.</p>
+        </div>
+      ) : null}
       <button
         type="button"
         onClick={() => onStart(brief)}
         disabled={disabled}
         className="mt-8 rounded-xl bg-amber-400 px-6 py-3 text-sm font-bold text-neutral-950 shadow-lg shadow-amber-500/10 transition hover:bg-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-200 focus:ring-offset-2 focus:ring-offset-neutral-950 disabled:cursor-wait disabled:opacity-50"
       >
-        {disabled ? "Preparing the world..." : "Start featured scenario"}
+        {disabled ? "Preparing the world..." : errorMessage ? "Retry live connection" : "Start featured scenario"}
       </button>
       <p className="mt-5 text-xs text-neutral-500">Experimental prototype · not certified emergency training</p>
     </section>

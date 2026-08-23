@@ -1,6 +1,66 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "fs";
 import path from "path";
+
+vi.mock("@reactor-models/lingbot-world-2", () => {
+  class FakeLingbotWorld2Model {
+    private imageHandler?: () => void;
+    private promptHandler?: (message: { prompt: string }) => void;
+    private mainVideoHandler?: (track: unknown, stream: unknown) => void;
+
+    onImageAccepted(handler: () => void) {
+      this.imageHandler = handler;
+    }
+
+    onPromptAccepted(handler: (message: { prompt: string }) => void) {
+      this.promptHandler = handler;
+    }
+
+    onConditionsReady() {}
+    onGenerationStarted() {}
+    onChunkComplete() {}
+    onGenerationPaused() {}
+    onGenerationResumed() {}
+    onCommandError() {}
+    on(event: string, handler: (value: unknown) => void) {
+      return () => undefined;
+    }
+
+    async connect() {}
+
+    async uploadFile() {
+      return { id: "fake-reference-file" };
+    }
+
+    async setImage() {
+      this.imageHandler?.();
+    }
+
+    async setSeed() {}
+
+    async setPrompt(input: { prompt: string }) {
+      this.promptHandler?.(input);
+    }
+
+    async start() {
+      setTimeout(() => {
+        this.mainVideoHandler?.({ kind: "video" }, { kind: "stream" });
+      }, 25);
+    }
+
+    onMainVideo(handler: (track: unknown, stream: unknown) => void) {
+      this.mainVideoHandler = handler;
+    }
+
+    async pause() {}
+    async resume() {}
+    async reset() {}
+    async disconnect() {}
+  }
+
+  return { LingbotWorld2Model: FakeLingbotWorld2Model };
+});
+
 import { ReactorClient, REACTOR_TIMEOUTS } from "../lib/reactor/client";
 import { POST as tokenRoute } from "../app/api/reactor-token/route";
 
@@ -56,7 +116,7 @@ describe("ReactorClient Adapter", () => {
     expect(client.getMode()).toBe("live");
   });
 
-  it("should handle token endpoint failure and explicitly switch to fallback mode", async () => {
+  it("should reject token endpoint failure without activating fallback", async () => {
     vi.stubGlobal("fetch", vi.fn().mockImplementation((url) => {
       if (typeof url === "string" && url.includes("/api/reactor-token")) {
         return Promise.resolve({
@@ -68,17 +128,53 @@ describe("ReactorClient Adapter", () => {
       return Promise.resolve({ ok: true, blob: async () => new Blob(["test"]) });
     }));
 
-    await client.start({
+    await expect(client.start({
       referenceImage: "/references/bedroom-fire.jpg",
       prompt: "Bedroom fire scenario prompt",
       seed: 12345,
       fallbackAsset: "/fallbacks/fire-bedroom-orient.mp4",
+    })).rejects.toThrow("Token exchange failed");
+
+    expect(client.getMode()).toBe("live");
+    expect(client.getStatus()).toBe("error");
+    expect(client.getActiveFallbackAsset()).toBeNull();
+    expect(client.getFallbackReason()).toContain("Token exchange failed");
+  });
+
+  it("waits for the first live model frame before resolving start", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((url) => {
+      if (typeof url === "string" && url.includes("/api/reactor-token")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ token: "jwt_test_token", mode: "live" }),
+        });
+      }
+      return Promise.resolve({ ok: true, blob: async () => new Blob(["test"]) });
+    }));
+
+    let frameReceived = false;
+    let settled = false;
+    const startPromise = client.start({
+      referenceImage: "/references/bedroom-fire.jpg",
+      prompt: "Bedroom fire scenario prompt",
+      seed: 12345,
+      fallbackAsset: "/fallbacks/fire-bedroom-orient.mp4",
+      onFrame: (frame) => {
+        if (frame) frameReceived = true;
+      },
+    }).then(() => {
+      settled = true;
     });
 
-    expect(client.getMode()).toBe("fallback");
-    expect(client.getStatus()).toBe("fallback");
-    expect(client.getActiveFallbackAsset()).toBe("/fallbacks/fire-bedroom-orient.mp4");
-    expect(client.getFallbackReason()).toContain("Token exchange failed");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(settled).toBe(false);
+
+    await startPromise;
+    expect(settled).toBe(true);
+    expect(frameReceived).toBe(true);
+    expect(client.getMode()).toBe("live");
+    expect(client.getStatus()).toBe("generating");
+    expect(client.getActiveFallbackAsset()).toBeNull();
   });
 
   it("should transition to fallback mode when useFallback is called", async () => {
@@ -155,7 +251,7 @@ describe("ReactorClient Adapter", () => {
 
   it("does not claim live frames when token acquisition fails", async () => {
     let frameReceived = false;
-    await client.start({
+    await expect(client.start({
       referenceImage: "/references/bedroom-fire.jpg",
       prompt: "Testing frame delivery",
       seed: 42,
@@ -163,9 +259,9 @@ describe("ReactorClient Adapter", () => {
       onFrame: (frame) => {
         if (frame) frameReceived = true;
       },
-    });
+    })).rejects.toThrow();
 
-    expect(client.getStatus()).toBe("fallback");
+    expect(client.getStatus()).toBe("error");
     expect(frameReceived).toBe(false);
   });
 });

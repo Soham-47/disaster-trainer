@@ -59,6 +59,7 @@ export function ExperiencePlayer({
   const [scenarioBrief, setScenarioBrief] = useState("");
   const [visualBranch, setVisualBranch] = useState<VisualBranch>("orient");
   const [pending, setPending] = useState(false);
+  const [startupError, setStartupError] = useState<string | null>(null);
   const [alternativeStarted, setAlternativeStarted] = useState(false);
   const [sessionResult, setSessionResult] = useState<SessionResult | null>(null);
   const [reducedMotion, setReducedMotion] = useState(false);
@@ -116,6 +117,9 @@ export function ExperiencePlayer({
       fallbackAsset: orientFallback,
       onFrame: streamFrame,
     });
+    if (modeOf(adapter) !== "live") {
+      throw new Error("Live LingBot startup did not become ready");
+    }
     setStatus((adapter as WorldModelAdapter & { getStatus?: () => WorldModelStatus }).getStatus?.() ?? "generating");
     setMode(modeOf(adapter));
   }, [adapter, streamFrame]);
@@ -123,13 +127,14 @@ export function ExperiencePlayer({
   const startScenario = async (brief: string) => {
     const normalizedBrief = normalizeScenarioBrief(brief);
     setScenarioBrief(normalizedBrief);
-    dispatch({ type: "START_SCENARIO", scenarioId: scenario.id });
+    setStartupError(null);
     setSessionResult(null);
     setPending(true);
     try {
       await startAdapter(scenario, normalizedBrief);
+      dispatch({ type: "START_SCENARIO", scenarioId: scenario.id });
     } catch (error) {
-      dispatch({ type: "FAIL", error: error instanceof Error ? error.message : "Unable to start scenario" });
+      setStartupError(error instanceof Error ? error.message : "Unable to connect to LingBot");
     } finally {
       setPending(false);
     }
@@ -196,9 +201,9 @@ export function ExperiencePlayer({
 
   const startTransfer = async () => {
     setPending(true);
-    dispatch({ type: "DEBRIEF_NEXT" });
     try {
       await startAdapter(transferScenario, scenarioBrief);
+      dispatch({ type: "DEBRIEF_NEXT" });
     } catch (error) {
       dispatch({ type: "FAIL", error: error instanceof Error ? error.message : "Unable to start transfer" });
     } finally {
@@ -238,6 +243,7 @@ export function ExperiencePlayer({
     setStatus("idle");
     setMode("live");
     setFallbackReason(null);
+    setStartupError(null);
     setVisualBranch("orient");
     streamFrame(null);
     setCapturedFrame(null);
@@ -251,7 +257,7 @@ export function ExperiencePlayer({
   const statePanel = (() => {
     switch (player.current) {
       case "entry":
-        return <EntryScreen onStart={(brief) => void startScenario(brief)} disabled={pending} />;
+        return <EntryScreen onStart={(brief) => void startScenario(brief)} disabled={pending} errorMessage={startupError} />;
       case "orient":
         return (
           <section className="rounded-2xl border border-neutral-800 bg-neutral-950/90 p-5 shadow-2xl">

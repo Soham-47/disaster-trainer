@@ -24,6 +24,7 @@ export const REACTOR_TIMEOUTS = {
   PROMPT: 15_000,
   FIRST_FRAME: 60_000,
   BRANCH: 20_000,
+  CLEANUP: 2_000,
 } as const;
 
 export type WorldModelAdapter = {
@@ -52,6 +53,9 @@ export class ReactorClient implements WorldModelAdapter {
   private model: LingbotWorld2Model | null = null;
   private imageAccepted = false;
   private promptAccepted = false;
+  private startupInProgress = false;
+  private startupFailurePromise: Promise<never> | null = null;
+  private rejectStartupFailure: ((error: Error) => void) | null = null;
 
   constructor() {
     this.setStatus("idle");
@@ -126,6 +130,33 @@ export class ReactorClient implements WorldModelAdapter {
     }, ms);
   }
 
+  private async waitForStartupStage<T>(
+    operation: Promise<T>,
+    ms: number,
+    reason: string
+  ): Promise<T> {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(`Timed out waiting for ${reason}`));
+      }, ms);
+    });
+    const startupFailure = this.startupFailurePromise || new Promise<never>(() => undefined);
+
+    try {
+      return await Promise.race([operation, timeout, startupFailure]);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  }
+
+  private async settleCleanup(operation: Promise<unknown>): Promise<void> {
+    await Promise.race([
+      operation.catch(() => undefined),
+      new Promise<void>((resolve) => setTimeout(resolve, REACTOR_TIMEOUTS.CLEANUP)),
+    ]);
+  }
+
   /**
    * Request session token from server route POST /api/reactor-token
    */
@@ -176,25 +207,30 @@ export class ReactorClient implements WorldModelAdapter {
     this.frameCallback = input.onFrame;
     this.fallbackReason = null;
     const defaultFallback = input.fallbackAsset || "/fallbacks/fire-bedroom-orient.mp4";
+    let resolveFirstFrame: (() => void) | null = null;
+    const firstFramePromise = new Promise<void>((resolve) => {
+      resolveFirstFrame = resolve;
+    });
+
+    this.startupInProgress = true;
+    this.startupFailurePromise = new Promise<never>((_, reject) => {
+      this.rejectStartupFailure = reject;
+    });
 
     try {
       this.setStatus("connecting");
-      this.scheduleTimeout(REACTOR_TIMEOUTS.TOKEN, "token exchange", defaultFallback);
-
       const tokenResult = await this.fetchToken();
-      this.clearTimeoutTimer();
 
       if (tokenResult.mode === "fallback" || !tokenResult.token) {
-        console.warn("[ReactorClient] Server token route returned fallback mode. Engaging local fallback.");
-        await this.useFallback(defaultFallback, "Token route returned fallback mode");
-        return;
+        throw new Error("Token route returned fallback mode");
       }
 
       // Initialize LingbotWorld2Model
-      this.model = new LingbotWorld2Model();
+      const model = new LingbotWorld2Model();
+      this.model = model;
 
       // Bind SDK events to application event emitter
-      this.model.onImageAccepted(() => {
+      model.onImageAccepted(() => {
         this.clearTimeoutTimer();
         this.imageAccepted = true;
         if (this.promptAccepted && (this.status === "uploading_image" || this.status === "ready")) {
@@ -206,7 +242,7 @@ export class ReactorClient implements WorldModelAdapter {
         });
       });
 
-      this.model.onPromptAccepted((msg) => {
+      model.onPromptAccepted((msg) => {
         if (this.status !== "generating" && this.status !== "paused") {
           this.clearTimeoutTimer();
         }
@@ -220,14 +256,14 @@ export class ReactorClient implements WorldModelAdapter {
         });
       });
 
-      this.model.onConditionsReady((msg) => {
+      model.onConditionsReady((msg) => {
         this.events.emit("conditions_ready", {
           seed: this.currentSeed,
           timestamp: Date.now(),
         });
       });
 
-      this.model.onGenerationStarted(() => {
+      model.onGenerationStarted(() => {
         this.setStatus("generating");
         this.events.emit("generation_started", {
           sessionId: `sess_${Date.now()}`,
@@ -236,7 +272,7 @@ export class ReactorClient implements WorldModelAdapter {
         });
       });
 
-      this.model.onChunkComplete((msg) => {
+      model.onChunkComplete((msg) => {
         this.events.emit("chunk_complete", {
           chunkIndex: msg.chunk_index,
           durationMs: 100,
@@ -244,7 +280,7 @@ export class ReactorClient implements WorldModelAdapter {
         });
       });
 
-      this.model.onGenerationPaused(() => {
+      model.onGenerationPaused(() => {
         this.clearTimeoutTimer();
         this.setStatus("paused");
         this.events.emit("generation_paused", {
@@ -253,7 +289,7 @@ export class ReactorClient implements WorldModelAdapter {
         });
       });
 
-      this.model.onGenerationResumed(() => {
+      model.onGenerationResumed(() => {
         this.clearTimeoutTimer();
         this.setStatus("generating");
         this.events.emit("generation_resumed", {
@@ -262,7 +298,8 @@ export class ReactorClient implements WorldModelAdapter {
         });
       });
 
-      this.model.onCommandError((msg) => {
+      model.onCommandError((msg) => {
+        const reason = `Reactor command ${msg.command} failed: ${msg.reason}`;
         console.warn(`[ReactorClient] Command Error from Reactor SDK: ${msg.command} - ${msg.reason}`);
         this.events.emit("command_error", {
           code: msg.command,
@@ -270,10 +307,14 @@ export class ReactorClient implements WorldModelAdapter {
           fatal: true,
           timestamp: Date.now(),
         });
-        void this.useFallback(defaultFallback, `Reactor command ${msg.command} failed: ${msg.reason}`);
+        if (this.startupInProgress) {
+          this.rejectStartupFailure?.(new Error(reason));
+        } else {
+          void this.useFallback(defaultFallback, reason);
+        }
       });
 
-      this.model.onMainVideo((track, stream) => {
+      model.onMainVideo((track, stream) => {
         this.clearTimeoutTimer();
         if (this.status !== "paused") {
           this.setStatus("generating");
@@ -287,55 +328,83 @@ export class ReactorClient implements WorldModelAdapter {
           height: 720,
           timestamp: Date.now(),
         });
+        resolveFirstFrame?.();
       });
 
-      this.model.on("error", (err: unknown) => {
+      model.on("error", (err: unknown) => {
+        const reason = `Reactor transport error: ${err instanceof Error ? err.message : String(err)}`;
         console.warn("[ReactorClient] Transport/SDK Error:", err);
-        void this.useFallback(
-          defaultFallback,
-          `Reactor transport error: ${err instanceof Error ? err.message : String(err)}`
-        );
+        if (this.startupInProgress) {
+          this.rejectStartupFailure?.(new Error(reason));
+        } else {
+          void this.useFallback(defaultFallback, reason);
+        }
       });
 
       // Connect SDK
-      this.scheduleTimeout(REACTOR_TIMEOUTS.CONNECT, "SDK connection", defaultFallback);
-      await this.model.connect(tokenResult.token);
-      this.clearTimeoutTimer();
+      await this.waitForStartupStage(
+        model.connect(tokenResult.token),
+        REACTOR_TIMEOUTS.CONNECT,
+        "SDK connection"
+      );
 
       // Step 2: Upload Reference Image
       this.setStatus("uploading_image");
-      this.scheduleTimeout(REACTOR_TIMEOUTS.IMAGE, "image upload & acceptance", defaultFallback);
 
-      let imageBlob: Blob;
-      if (this.referenceImage.startsWith("data:")) {
-        const res = await fetch(this.referenceImage);
-        imageBlob = await res.blob();
-      } else {
-        const res = await fetch(this.referenceImage);
-        if (!res.ok) {
-          throw new Error(`Failed to load reference image asset: ${this.referenceImage}`);
-        }
-        imageBlob = await res.blob();
-      }
+      await this.waitForStartupStage(
+        (async () => {
+          let imageBlob: Blob;
+          if (this.referenceImage.startsWith("data:")) {
+            const res = await fetch(this.referenceImage);
+            imageBlob = await res.blob();
+          } else {
+            const res = await fetch(this.referenceImage);
+            if (!res.ok) {
+              throw new Error(`Failed to load reference image asset: ${this.referenceImage}`);
+            }
+            imageBlob = await res.blob();
+          }
 
-      const fileRef = await this.model.uploadFile(imageBlob, { name: "reference.jpg" });
-      await this.model.setImage({ image: fileRef });
+          const fileRef = await model.uploadFile(imageBlob, { name: "reference.jpg" });
+          await model.setImage({ image: fileRef });
+        })(),
+        REACTOR_TIMEOUTS.IMAGE,
+        "image upload & acceptance"
+      );
 
       // Step 3: Set Seed & Prompt. The SDK events above remain the source
       // of truth for acceptance; these calls only enqueue the commands.
-      this.scheduleTimeout(REACTOR_TIMEOUTS.PROMPT, "prompt acceptance", defaultFallback);
+      await this.waitForStartupStage(
+        (async () => {
+          await model.setSeed({ seed: this.currentSeed });
+          await model.setPrompt({ prompt: this.currentPrompt });
+        })(),
+        REACTOR_TIMEOUTS.PROMPT,
+        "prompt acceptance"
+      );
 
-      await this.model.setSeed({ seed: this.currentSeed });
-      await this.model.setPrompt({ prompt: this.currentPrompt });
-
-      // Step 4: Begin Generation
-      this.scheduleTimeout(REACTOR_TIMEOUTS.FIRST_FRAME, "first frame generation", defaultFallback);
-      await this.model.start();
+      // Step 4: Begin Generation. The command may resolve before WebRTC has
+      // published the first frame, so readiness is gated on onMainVideo below.
+      await this.waitForStartupStage(model.start(), REACTOR_TIMEOUTS.PROMPT, "generation start command");
+      await this.waitForStartupStage(firstFramePromise, REACTOR_TIMEOUTS.FIRST_FRAME, "first model frame");
+      this.clearTimeoutTimer();
+      this.startupInProgress = false;
+      this.startupFailurePromise = null;
+      this.rejectStartupFailure = null;
     } catch (err: any) {
       const startupReason = `Live startup failed: ${err.message || err}`;
       this.fallbackReason = startupReason;
       console.warn("[ReactorClient]", startupReason);
-      await this.useFallback(defaultFallback, startupReason);
+      this.startupInProgress = false;
+      this.startupFailurePromise = null;
+      this.rejectStartupFailure = null;
+      this.clearTimeoutTimer();
+      await this.cleanupModel();
+      this.currentMode = "live";
+      this.activeFallbackAsset = null;
+      this.frameCallback?.(null);
+      this.setStatus("error");
+      throw new Error(startupReason);
     }
   }
 
@@ -396,13 +465,12 @@ export class ReactorClient implements WorldModelAdapter {
   }
 
   private async cleanupModel(): Promise<void> {
-    if (this.model) {
-      try {
-        await this.model.reset();
-        await this.model.disconnect();
-      } catch (e) {}
-      this.model = null;
-    }
+    const model = this.model;
+    this.model = null;
+    if (!model) return;
+
+    await this.settleCleanup(model.reset());
+    await this.settleCleanup(model.disconnect());
   }
 
   public async reset(): Promise<void> {
