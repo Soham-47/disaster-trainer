@@ -44,10 +44,10 @@ export const flashFloodPack: ScenarioPack = {
     recommendedChoiceIds: ["move-to-higher-ground"],
   }],
   sourceReferences: [flashFloodSource],
-  referenceImage: "/references/flash-flood-room.png",
+  referenceImage: "/references/flash-flood-room-v2.png",
   reactorSeed: 42102,
   basePrompt: "A navigable first-person flash-flood scene in a ground-floor building during a sudden downpour, with water rising outside the lower exit, floating debris beyond the glass, and a visible stairway to a higher floor. Keep camera, layout, hazards, and lighting continuous. Visuals only; do not invent advice, people, rooms, or actions.",
-  orientFallbackAsset: "/fallbacks/flash-flood-room.svg",
+  orientFallbackAsset: "/references/flash-flood-room-v2.png",
   cues: [{
     id: "rising-floodwater",
     learnerCopy: "Water is rising over the lower exit, and floating debris is moving quickly outside.",
@@ -61,7 +61,7 @@ export const flashFloodPack: ScenarioPack = {
       requiredFacts: ["higher floor", "fast water below", "learner away from water"],
       forbiddenFacts: ["learner wades through water", "learner enters a closed attic", "model gives emergency advice"],
       durationSeconds: 10,
-      fallbackAsset: "/fallbacks/flash-flood-room.svg",
+      fallbackAsset: "/references/flash-flood-room-v2.png",
     },
     "walk-through-floodwater-consequence": {
       stateId: "walk-through-floodwater-consequence",
@@ -70,7 +70,7 @@ export const flashFloodPack: ScenarioPack = {
       requiredFacts: ["fast-moving water", "debris", "obscured path", "lower exit"],
       forbiddenFacts: ["clear dry crossing", "model gives emergency advice"],
       durationSeconds: 10,
-      fallbackAsset: "/fallbacks/flash-flood-room.svg",
+      fallbackAsset: "/references/flash-flood-room-v2.png",
     },
   },
   debrief: {

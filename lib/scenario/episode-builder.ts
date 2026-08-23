@@ -9,6 +9,8 @@ import type {
   SceneSpec,
 } from "./types";
 
+const VISUAL_STABILITY_CONTRACT = "Upright eye-level first-person camera with a level horizon and no camera roll. Preserve room geometry, object identity, scale, lighting direction, and hazard locations between frames. Render no readable text, letters, numbers, captions, signage, labels, screens, logos, or watermarks anywhere in the world.";
+
 function stableHash(value: string): number {
   let hash = 0;
   for (const character of value) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
@@ -23,7 +25,7 @@ function sceneFor(pack: ScenarioPack, parameters: ScenarioParameters, nodeId: st
   return {
     referenceImage: pack.referenceImage,
     seed: pack.reactorSeed + (stableHash(`${pack.id}:${nodeId}`) % 100000),
-    invariantPrompt: `${pack.basePrompt} ${parameterText(parameters)} Keep camera, layout, lighting, hazards, and first-person viewpoint fixed.`,
+    invariantPrompt: `${pack.basePrompt} ${parameterText(parameters)} Keep camera, layout, lighting, hazards, and first-person viewpoint fixed. ${VISUAL_STABILITY_CONTRACT}`,
     deltaPrompt,
     requiredFacts: [...requiredFacts],
     forbiddenFacts: [...forbiddenFacts, "model provides safety advice", "invented rooms", "invented actions"],

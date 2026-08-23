@@ -48,7 +48,7 @@ export const structureFirePack: ScenarioPack = {
     },
   ],
   sourceReferences: [redCrossFireSource],
-  referenceImage: "/references/bedroom-fire.jpg",
+  referenceImage: "/references/bedroom-fire-v2.png",
   reactorSeed: 42069,
   basePrompt: "A navigable structure-fire scene with a closed exit door, smoke under the gap, an alarm, and no invented safety instructions.",
   orientFallbackAsset: "/fallbacks/fire-bedroom-orient.mp4",

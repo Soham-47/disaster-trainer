@@ -9,6 +9,7 @@ vi.mock("@reactor-models/lingbot-world-2", () => {
     private mainVideoHandler?: (track: unknown, stream: unknown) => void;
     private pauseHandlers = new Set<() => void>();
     private resumeHandlers = new Set<() => void>();
+    private chunkHandlers = new Set<(message: { chunk_index: number }) => void>();
     private statusHandler?: (status: string) => void;
     private status = "waiting";
     private imageAccepted = false;
@@ -26,7 +27,10 @@ vi.mock("@reactor-models/lingbot-world-2", () => {
 
     onConditionsReady() {}
     onGenerationStarted() {}
-    onChunkComplete() {}
+    onChunkComplete(handler: (message: { chunk_index: number }) => void) {
+      this.chunkHandlers.add(handler);
+      return () => this.chunkHandlers.delete(handler);
+    }
     onGenerationPaused(handler: () => void) {
       this.pauseHandlers.add(handler);
       return () => this.pauseHandlers.delete(handler);
@@ -83,6 +87,7 @@ vi.mock("@reactor-models/lingbot-world-2", () => {
       if (!this.promptAccepted) throw new Error("No prompt set. Call set_prompt first.");
       setTimeout(() => {
         this.mainVideoHandler?.({ kind: "video" }, { kind: "stream" });
+        this.chunkHandlers.forEach((handler) => handler({ chunk_index: 0 }));
       }, 25);
     }
 
@@ -112,7 +117,10 @@ vi.mock("@reactor-models/lingbot-world-2", () => {
     async setLookVertical() {
       if (this.status !== "ready") throw new Error(`Cannot send look while status is "${this.status}"`);
     }
-    async reset() {}
+    async reset() {
+      this.imageAccepted = false;
+      this.promptAccepted = false;
+    }
     async disconnect() {}
   }
 
@@ -324,6 +332,37 @@ describe("ReactorClient Adapter", () => {
     expect(settled).toBe(false);
     await promptPromise;
     expect(settled).toBe(true);
+  });
+
+  it("restarts a checkpoint inside the existing Reactor connection", async () => {
+    const fetchSpy = vi.fn().mockImplementation((url) => {
+      if (typeof url === "string" && url.includes("/api/reactor-token")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ token: "jwt_test_token", mode: "live" }),
+        });
+      }
+      return Promise.resolve({ ok: true, blob: async () => new Blob(["test"]) });
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await client.start({
+      referenceImage: "/references/bedroom-fire.jpg",
+      prompt: "Bedroom fire scenario prompt",
+      seed: 12345,
+      fallbackAsset: "/fallbacks/fire-bedroom-orient.mp4",
+    });
+    await client.restartFromCheckpoint({
+      frameDataUrl: "data:image/jpeg;base64,checkpoint",
+      prompt: "The branch begins from the captured bedroom frame.",
+      seed: 54321,
+      attentionWindow: "small",
+      fallbackAsset: "/fallbacks/fire-shelter-safe.mp4",
+    });
+
+    const tokenCalls = fetchSpy.mock.calls.filter(([url]) => typeof url === "string" && url.includes("/api/reactor-token"));
+    expect(tokenCalls).toHaveLength(1);
+    expect(client.getStatus()).toBe("generating");
   });
 
   it("should transition to fallback mode when useFallback is called", async () => {

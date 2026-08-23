@@ -44,10 +44,10 @@ export const cyclonePack: ScenarioPack = {
     recommendedChoiceIds: ["interior-shelter"],
   }],
   sourceReferences: [cycloneSource],
-  referenceImage: "/references/cyclone-shelter.png",
+  referenceImage: "/references/cyclone-shelter-v2.png",
   reactorSeed: 42104,
   basePrompt: "A navigable first-person cyclone scene inside a sturdy high-rise, with heavy rain, high winds, rattling windows, flickering lights, and a small interior windowless room nearby. Keep camera, layout, hazards, and lighting continuous. Visuals only; do not invent advice, people, rooms, or actions.",
-  orientFallbackAsset: "/fallbacks/cyclone-shelter.svg",
+  orientFallbackAsset: "/references/cyclone-shelter-v2.png",
   cues: [{
     id: "cyclone-wind-warning",
     learnerCopy: "High winds are rattling the windows, rain is striking the glass, and the power is flickering.",
@@ -61,7 +61,7 @@ export const cyclonePack: ScenarioPack = {
       requiredFacts: ["small interior room", "learner away from windows", "continued wind and rain"],
       forbiddenFacts: ["learner stands at a window", "learner goes outdoors", "model gives emergency advice"],
       durationSeconds: 10,
-      fallbackAsset: "/fallbacks/cyclone-shelter.svg",
+      fallbackAsset: "/references/cyclone-shelter-v2.png",
     },
     "watch-by-window-consequence": {
       stateId: "watch-by-window-consequence",
@@ -70,7 +70,7 @@ export const cyclonePack: ScenarioPack = {
       requiredFacts: ["rattling window", "wind-driven rain", "loose objects outside"],
       forbiddenFacts: ["calm weather", "learner is safely sheltered", "model gives emergency advice"],
       durationSeconds: 10,
-      fallbackAsset: "/fallbacks/cyclone-shelter.svg",
+      fallbackAsset: "/references/cyclone-shelter-v2.png",
     },
   },
   debrief: {

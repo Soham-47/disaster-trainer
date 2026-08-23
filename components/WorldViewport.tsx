@@ -6,6 +6,7 @@ import { reactorClient, WorldModelStatus } from "@/lib/reactor/client";
 import type { WorldModelNavigationInput } from "@/lib/reactor/client";
 import { getViewportMediaMode } from "@/lib/player/viewport-media";
 import { idleNavigation, navigationFromKeys } from "@/lib/player/navigation";
+import type { DisasterType } from "@/lib/scenario/types";
 
 interface WorldViewportProps {
   status: WorldModelStatus;
@@ -20,6 +21,8 @@ interface WorldViewportProps {
   mode?: "live" | "fallback";
   onCapturedFrame?: (frameUrl: string) => void;
   onNavigation?: (input: WorldModelNavigationInput) => void;
+  disasterType?: DisasterType;
+  transitionLabel?: string | null;
 }
 
 export const WorldViewport: React.FC<WorldViewportProps> = ({
@@ -35,6 +38,8 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
   mode = "live",
   onCapturedFrame,
   onNavigation,
+  disasterType,
+  transitionLabel,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -214,13 +219,14 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
 
   return (
     <div
-      className={`relative w-full h-full min-h-[480px] bg-neutral-950 overflow-hidden select-none flex items-center justify-center ${className}`}
+      className={`relative w-full h-full min-h-[480px] bg-neutral-950 overflow-hidden select-none flex items-center justify-center ${disasterType ? `world-${disasterType}` : ""} ${className}`}
     >
       {/* Background Radial Gradient */}
       <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-transparent to-neutral-950/70 z-10 pointer-events-none" />
 
       {/* Live Stream Video Element (WebRTC Track) */}
       <video
+        data-world-media="true"
         ref={videoRef}
         autoPlay
         playsInline
@@ -236,6 +242,7 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
       {/* Fallback Prepared Video Element */}
       {showFallbackVideo && (
         <video
+          data-world-media="true"
           ref={fallbackVideoRef}
           src={fallbackAsset}
           autoPlay
@@ -249,6 +256,7 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
 
       {showFallbackImage && (
         <Image
+          data-world-media="true"
           src={fallbackAsset}
           alt="Prepared disaster continuation"
           fill
@@ -260,6 +268,7 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
 
       {/* Neutral waiting canvas shown only until a live track or prepared fallback media is ready */}
       <canvas
+        data-world-media="true"
         ref={canvasRef}
         className={`absolute inset-0 w-full h-full object-cover transition-all duration-700 ${
           showFallbackMedia || liveVideoVisible
@@ -279,6 +288,7 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
         >
           {localFrameUrl && (
             <Image
+              data-world-media="true"
               src={localFrameUrl}
               alt="Captured Decision Context Frame"
               fill
@@ -293,13 +303,22 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
       )}
 
       {/* Rewind Banner */}
-      {isRewinding && (
+      {transitionLabel && (
         <div className="absolute inset-0 z-40 pointer-events-none flex flex-col items-center justify-center bg-amber-950/40 backdrop-blur-sm">
           <div className="text-amber-300 font-mono text-xs tracking-widest uppercase mb-2 animate-pulse bg-amber-950/90 px-4 py-1.5 rounded-full border border-amber-500/40 shadow-2xl">
-            ↺ Rewinding Time & Context...
+            {transitionLabel}
           </div>
           <div className="w-full h-1 bg-gradient-to-r from-transparent via-amber-400 to-transparent animate-pulse" />
         </div>
+      )}
+
+      {disasterType && (
+        <div
+          aria-hidden="true"
+          data-testid="disaster-effects"
+          data-disaster-type={disasterType}
+          className={`world-effects world-effects-${disasterType}`}
+        />
       )}
 
       {/* World Context Badge */}

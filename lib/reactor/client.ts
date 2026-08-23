@@ -79,6 +79,8 @@ export class ReactorClient implements WorldModelAdapter {
   private startupInProgress = false;
   private startupFailurePromise: Promise<never> | null = null;
   private rejectStartupFailure: ((error: Error) => void) | null = null;
+  private restartInProgress = false;
+  private resolveRestartChunk: (() => void) | null = null;
 
   constructor() {
     this.setStatus("idle");
@@ -343,7 +345,7 @@ export class ReactorClient implements WorldModelAdapter {
       });
 
       model.onGenerationStarted(() => {
-        this.setStatus("generating");
+        if (!this.restartInProgress) this.setStatus("generating");
         this.events.emit("generation_started", {
           sessionId: `sess_${Date.now()}`,
           mode: "live",
@@ -352,6 +354,12 @@ export class ReactorClient implements WorldModelAdapter {
       });
 
       model.onChunkComplete((msg) => {
+        if (this.restartInProgress) {
+          this.restartInProgress = false;
+          this.setStatus("generating");
+          this.resolveRestartChunk?.();
+          this.resolveRestartChunk = null;
+        }
         this.events.emit("chunk_complete", {
           chunkIndex: msg.chunk_index,
           durationMs: 100,
@@ -602,6 +610,8 @@ export class ReactorClient implements WorldModelAdapter {
   private async cleanupModel(): Promise<void> {
     const model = this.model;
     this.model = null;
+    this.restartInProgress = false;
+    this.resolveRestartChunk = null;
     if (!model) return;
 
     await this.settleCleanup(model.reset());
@@ -660,14 +670,68 @@ export class ReactorClient implements WorldModelAdapter {
     attentionWindow: "small" | "large" | "auto";
     fallbackAsset: string;
   }): Promise<void> {
-    await this.start({
-      referenceImage: input.frameDataUrl,
-      prompt: input.prompt,
-      seed: input.seed,
-      attentionWindow: input.attentionWindow,
-      fallbackAsset: input.fallbackAsset,
-      onFrame: this.frameCallback,
+    const model = this.model;
+    if (this.currentMode !== "live" || !model || model.getStatus() !== "ready") {
+      await this.start({
+        referenceImage: input.frameDataUrl,
+        prompt: input.prompt,
+        seed: input.seed,
+        attentionWindow: input.attentionWindow,
+        fallbackAsset: input.fallbackAsset,
+        onFrame: this.frameCallback,
+      });
+      return;
+    }
+
+    this.referenceImage = input.frameDataUrl;
+    this.currentPrompt = input.prompt;
+    this.currentSeed = input.seed;
+    this.activeFallbackAsset = null;
+    this.fallbackReason = null;
+    this.imageAccepted = false;
+    this.promptAccepted = false;
+    this.restartInProgress = true;
+    this.startupInProgress = true;
+    this.startupFailurePromise = new Promise<never>((_, reject) => {
+      this.rejectStartupFailure = reject;
     });
+    const firstChunk = new Promise<void>((resolve) => {
+      this.resolveRestartChunk = resolve;
+    });
+
+    try {
+      this.setStatus("uploading_image");
+      await this.waitForStartupStage(model.reset(), REACTOR_TIMEOUTS.BRANCH, "checkpoint reset");
+      const imageResponse = await fetch(input.frameDataUrl);
+      const imageBlob = await imageResponse.blob();
+      const fileRef = await model.uploadFile(imageBlob, { name: "checkpoint.jpg" });
+      const imageAccepted = this.waitForModelSignal(
+        (handler) => model.onImageAccepted(() => handler()),
+        REACTOR_TIMEOUTS.IMAGE,
+        "checkpoint image acceptance"
+      );
+      await model.setImage({ image: fileRef });
+      await this.waitForStartupStage(imageAccepted, REACTOR_TIMEOUTS.IMAGE, "checkpoint image acceptance");
+
+      const promptAccepted = this.waitForModelSignal(
+        (handler) => model.onPromptAccepted(() => handler()),
+        REACTOR_TIMEOUTS.PROMPT,
+        "checkpoint prompt acceptance"
+      );
+      await model.setSeed({ seed: input.seed });
+      const modelWithAttention = model as LingbotWorld2Model & { setAttnWindow?: (params: { attn_window: "small" | "large" | "auto" }) => Promise<void> };
+      await modelWithAttention.setAttnWindow?.({ attn_window: input.attentionWindow });
+      await model.setPrompt({ prompt: input.prompt });
+      await this.waitForStartupStage(promptAccepted, REACTOR_TIMEOUTS.PROMPT, "checkpoint prompt acceptance");
+      await this.waitForStartupStage(model.start(), REACTOR_TIMEOUTS.PROMPT, "checkpoint generation start");
+      await this.waitForStartupStage(firstChunk, REACTOR_TIMEOUTS.FIRST_FRAME, "first checkpoint chunk");
+    } finally {
+      this.startupInProgress = false;
+      this.startupFailurePromise = null;
+      this.rejectStartupFailure = null;
+      this.restartInProgress = false;
+      this.resolveRestartChunk = null;
+    }
   }
 
   public async reset(): Promise<void> {

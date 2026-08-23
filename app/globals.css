@@ -25,3 +25,78 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #404040;
 }
+
+@keyframes world-quake {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  18% { transform: translate3d(-2px, 1px, 0); }
+  36% { transform: translate3d(2px, -1px, 0); }
+  54% { transform: translate3d(-1px, -1px, 0); }
+  72% { transform: translate3d(1px, 1px, 0); }
+}
+
+@keyframes world-drift {
+  from { background-position: 0 0, 0 0; }
+  to { background-position: 18px 36px, -12px 28px; }
+}
+
+@keyframes world-flicker {
+  0%, 86%, 100% { opacity: 0; }
+  88% { opacity: .1; }
+  91% { opacity: 0; }
+  94% { opacity: .06; }
+}
+
+.world-effects {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.world-earthquake [data-world-media="true"] {
+  animation: world-quake 360ms steps(2, end) infinite;
+  transform-origin: center;
+}
+
+.world-effects-earthquake {
+  background:
+    radial-gradient(circle at 18% 10%, rgb(226 232 240 / .24) 0 1px, transparent 2px),
+    radial-gradient(circle at 72% 18%, rgb(226 232 240 / .16) 0 1px, transparent 2px);
+  background-size: 34px 42px, 48px 56px;
+  animation: world-drift 2.8s linear infinite;
+}
+
+.world-effects-earthquake::after,
+.world-effects-cyclone::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: white;
+  animation: world-flicker 4.5s linear infinite;
+}
+
+.world-effects-structure_fire {
+  background: linear-gradient(to top, rgb(63 20 10 / .34), transparent 34%);
+}
+
+.world-effects-flash_flood {
+  background: linear-gradient(to top, rgb(30 64 175 / .2), transparent 30%);
+}
+
+.world-effects-wildfire {
+  background: radial-gradient(circle at 76% 78%, rgb(251 146 60 / .16), transparent 34%);
+}
+
+.world-effects-cyclone {
+  background: repeating-linear-gradient(104deg, transparent 0 21px, rgb(186 230 253 / .12) 22px 23px, transparent 24px 44px);
+  animation: world-drift 1.2s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .world-earthquake [data-world-media="true"],
+  .world-effects,
+  .world-effects::after {
+    animation: none !important;
+  }
+}

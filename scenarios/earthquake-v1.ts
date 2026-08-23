@@ -44,10 +44,10 @@ export const earthquakePack: ScenarioPack = {
     recommendedChoiceIds: ["drop-cover-hold"],
   }],
   sourceReferences: [earthquakeSource],
-  referenceImage: "/references/earthquake-room.png",
+  referenceImage: "/references/earthquake-room-v2.png",
   reactorSeed: 42101,
   basePrompt: "A navigable first-person earthquake scene inside a high-rise room during active shaking, with a sturdy table, moving bookcase, rattling windows, falling dust, and flickering lights. Keep camera, layout, hazards, and lighting continuous. Visuals only; do not invent advice, people, rooms, or actions.",
-  orientFallbackAsset: "/fallbacks/earthquake-room.svg",
+  orientFallbackAsset: "/references/earthquake-room-v2.png",
   cues: [{
     id: "earthquake-shaking",
     learnerCopy: "The floor is shaking, objects are moving, and dust is falling near a sturdy table.",
@@ -61,7 +61,7 @@ export const earthquakePack: ScenarioPack = {
       requiredFacts: ["learner stays low", "sturdy table", "covered head and neck", "continued shaking"],
       forbiddenFacts: ["learner runs outside", "model gives emergency advice"],
       durationSeconds: 10,
-      fallbackAsset: "/fallbacks/earthquake-room.svg",
+      fallbackAsset: "/references/earthquake-room-v2.png",
     },
     "run-during-shaking-consequence": {
       stateId: "run-during-shaking-consequence",
@@ -70,7 +70,7 @@ export const earthquakePack: ScenarioPack = {
       requiredFacts: ["shaking room", "falling objects", "stairwell path"],
       forbiddenFacts: ["clear safe route", "model gives emergency advice"],
       durationSeconds: 10,
-      fallbackAsset: "/fallbacks/earthquake-room.svg",
+      fallbackAsset: "/references/earthquake-room-v2.png",
     },
   },
   debrief: {

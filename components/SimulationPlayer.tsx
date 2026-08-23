@@ -52,6 +52,9 @@ export function SimulationPlayer({ adapter = reactorClient }: SimulationPlayerPr
   const [isRewinding, setIsRewinding] = useState(false);
   const [alternativeStarted, setAlternativeStarted] = useState(false);
   const [sessionAssessment, setSessionAssessment] = useState<ReturnType<typeof scoreSimulation> | null>(null);
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [transitionLabel, setTransitionLabel] = useState<string | null>(null);
   const frameRef = useRef<string | null>(null);
   const primaryStateRef = useRef<SimulationState | null>(null);
   const initialActionIdRef = useRef<string | null>(null);
@@ -171,6 +174,7 @@ export function SimulationPlayer({ adapter = reactorClient }: SimulationPlayerPr
           createdAt: Date.now(),
         };
         dispatch({ type: "SAVE_CHECKPOINT", checkpoint });
+        setTransitionLabel("Rendering consequence");
         setIsRewinding(true);
         dispatch({ type: "SUBMIT_ACTION", intent });
         await adapter.restartFromCheckpoint({
@@ -192,6 +196,7 @@ export function SimulationPlayer({ adapter = reactorClient }: SimulationPlayerPr
       dispatch({ type: "SUBMIT_ACTION", intent });
       setIsRewinding(false);
     } finally {
+      setTransitionLabel(null);
       setPending(false);
     }
   };
@@ -212,6 +217,7 @@ export function SimulationPlayer({ adapter = reactorClient }: SimulationPlayerPr
     if (!primaryStateRef.current) primaryStateRef.current = simulation;
     setPending(true);
     setFallbackAsset(alternativeNode.scene.fallbackAsset);
+    setTransitionLabel("Restoring checkpoint");
     setIsRewinding(true);
     dispatch({ type: "START_REWIND" });
     try {
@@ -231,6 +237,7 @@ export function SimulationPlayer({ adapter = reactorClient }: SimulationPlayerPr
     dispatch({ type: "SUBMIT_ACTION", intent: { verb: alternate.verb, targetId: alternate.targetId, toolId: alternate.toolId, source: "hotspot" } });
     setAlternativeStarted(true);
     setIsRewinding(false);
+    setTransitionLabel(null);
     setPending(false);
   };
 
@@ -263,6 +270,9 @@ export function SimulationPlayer({ adapter = reactorClient }: SimulationPlayerPr
     frameRef.current = null;
     initialActionIdRef.current = null;
     setAlternativeStarted(false);
+    setCommandOpen(false);
+    setHistoryOpen(false);
+    setTransitionLabel(null);
     setPending(false);
   };
 
@@ -275,6 +285,11 @@ export function SimulationPlayer({ adapter = reactorClient }: SimulationPlayerPr
   const primaryHintIds = currentNode?.hintIds ?? [];
   const activeHints = graph?.hints.filter((hint) => primaryHintIds.includes(hint.id)) ?? [];
   const usedHintIds = simulation.eventLog.flatMap((event) => event.hintId ? [event.hintId] : []);
+
+  useEffect(() => {
+    setCommandOpen(false);
+    setHistoryOpen(false);
+  }, [currentNode?.id]);
 
   if (phase === "entry") {
     return <main className="min-h-screen bg-neutral-950 px-4 py-6 text-neutral-100"><div className="mx-auto max-w-7xl"><EntryScreen onStart={(brief) => void startScenario(brief)} disabled={pending} errorMessage={startupError} /></div></main>;
@@ -296,15 +311,14 @@ export function SimulationPlayer({ adapter = reactorClient }: SimulationPlayerPr
   }
 
   return (
-    <main className="min-h-screen bg-neutral-950 text-neutral-100">
-      <header className="flex items-center justify-between gap-4 border-b border-white/10 bg-neutral-950 px-4 py-3 md:px-8">
-        <div><p className="text-xs font-mono uppercase tracking-[0.28em] text-amber-300">Counterfactual Disaster Trainer</p><p className="mt-1 text-xs text-neutral-500">Interactive preparedness simulation · constrained safety truth</p></div>
+    <main className="flex h-dvh flex-col overflow-hidden bg-neutral-950 text-neutral-100">
+      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-white/10 bg-neutral-950 px-4 py-3 md:px-8">
+        <div><p className="text-xs font-mono uppercase tracking-[0.28em] text-amber-300">Counterfactual Disaster Trainer</p><p className="mt-1 hidden text-xs text-neutral-500 sm:block">Interactive preparedness simulation · constrained safety truth</p></div>
         <GenerationStatus status={status} mode={mode} modelName="LingBot World 2" fallbackReason={mode === "fallback" ? fallbackReason : null} />
       </header>
-      <section className="relative mx-auto h-[calc(100vh-73px)] min-h-[640px] max-w-[1600px] overflow-hidden bg-black">
-        <WorldViewport status={status} mode={mode} liveStream={liveStream} fallbackAsset={fallbackAsset} capturedFrameUrl={capturedFrame} isRewinding={isRewinding} onCapturedFrame={(frame) => { frameRef.current = frame; setCapturedFrame(frame); }} onNavigation={handleNavigation} />
+      <section className="relative mx-auto min-h-0 w-full max-w-[1600px] flex-1 overflow-hidden bg-black">
+        <WorldViewport status={status} mode={mode} liveStream={liveStream} fallbackAsset={fallbackAsset} capturedFrameUrl={capturedFrame} isRewinding={isRewinding} transitionLabel={transitionLabel} disasterType={graph?.disasterType} onCapturedFrame={(frame) => { frameRef.current = frame; setCapturedFrame(frame); }} onNavigation={handleNavigation} />
         {graph && world && currentNode && <SimulationHUD title={currentNode.title} immediatePriority={currentNode.immediatePriority} hazardLevels={world.hazardLevels} status={phase === "transfer" ? "transfer" : world.status} nodeIndex={nodeIndex} nodeCount={nodeList.length} />}
-        {isRewinding && <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-amber-950/40 backdrop-blur-sm"><span className="rounded-full border border-amber-300/40 bg-black/70 px-5 py-2 text-xs font-mono uppercase tracking-[0.22em] text-amber-200">Restoring checkpoint</span></div>}
         {currentNode && world?.status === "debrief" && (
           <div className="absolute inset-x-4 bottom-4 z-30 mx-auto max-w-2xl rounded-2xl border border-purple-300/25 bg-neutral-950/90 p-5 shadow-2xl backdrop-blur-xl md:inset-x-auto md:left-1/2 md:w-[min(92%,620px)] md:-translate-x-1/2">
             <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-purple-300">Debrief checkpoint</p>
@@ -316,11 +330,28 @@ export function SimulationPlayer({ adapter = reactorClient }: SimulationPlayerPr
           </div>
         )}
         {currentNode && world?.status === "active" && (
-          <div className="absolute inset-x-4 bottom-4 z-30 mx-auto max-w-3xl space-y-3 md:inset-x-auto md:left-1/2 md:w-[min(92%,760px)] md:-translate-x-1/2">
-            <div className="flex items-end justify-between gap-3"><InteractionPrompt interaction={activeInteractions[0] ?? null} disabled={pending} onActivate={(intent) => void submitIntent(intent)} /><HintPanel hints={activeHints} usedHintIds={usedHintIds} disabled={pending} onRequest={(hint) => handleHint(hint.id)} /></div>
-            <ActionWheel interactions={activeInteractions} disabled={pending} onSelect={(intent) => void submitIntent(intent)} />
-            <CommandBar node={currentNode} disabled={pending} onIntent={(intent) => void submitIntent(intent)} />
-            <div className="flex items-end justify-between gap-3"><AvailableResources resources={world.availableResources} /><ScenarioTimeline events={simulation.eventLog} /></div>
+          <div data-testid="action-dock" className="absolute inset-x-3 bottom-3 z-30 mx-auto max-w-3xl md:inset-x-auto md:left-1/2 md:w-[min(92%,760px)] md:-translate-x-1/2">
+            <div className="rounded-2xl border border-white/10 bg-neutral-950/80 p-3 shadow-2xl backdrop-blur-xl">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0 flex-1">
+                  {activeInteractions.length === 1 ? (
+                    <InteractionPrompt interaction={activeInteractions[0]} disabled={pending} onActivate={(intent) => void submitIntent(intent)} />
+                  ) : (
+                    <ActionWheel interactions={activeInteractions} disabled={pending} onSelect={(intent) => void submitIntent(intent)} />
+                  )}
+                </div>
+                <HintPanel hints={activeHints} usedHintIds={usedHintIds} disabled={pending} onRequest={(hint) => handleHint(hint.id)} />
+              </div>
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-2">
+                <AvailableResources resources={world.availableResources} />
+                <div className="flex items-center gap-2">
+                  <button type="button" aria-expanded={historyOpen} onClick={() => setHistoryOpen((open) => !open)} className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-neutral-300 hover:border-white/25 hover:text-white">History · {simulation.eventLog.length}</button>
+                  <button type="button" aria-expanded={commandOpen} onClick={() => setCommandOpen((open) => !open)} className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-neutral-300 hover:border-amber-300/50 hover:text-white">Type an action</button>
+                </div>
+              </div>
+              {commandOpen && <div className="mt-3"><CommandBar node={currentNode} disabled={pending} onIntent={(intent) => void submitIntent(intent)} /></div>}
+              {historyOpen && <div className="mt-3"><ScenarioTimeline events={simulation.eventLog} /></div>}
+            </div>
           </div>
         )}
       </section>

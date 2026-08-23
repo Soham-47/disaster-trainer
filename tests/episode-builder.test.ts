@@ -38,4 +38,14 @@ describe("reviewed pack episode builder", () => {
     expect(validateEpisodeGraph(graph)).toEqual({ valid: true, errors: [] });
     expect(Object.keys(graph.nodes)).toHaveLength(6);
   });
+
+  it("anchors every generated scene to an upright text-free camera contract", () => {
+    const graph = composeEpisodeFromPack(structureFirePack, parameters);
+
+    for (const node of Object.values(graph.nodes)) {
+      expect(node.scene.invariantPrompt).toContain("level horizon");
+      expect(node.scene.invariantPrompt).toContain("no readable text");
+      expect(node.scene.invariantPrompt).toContain("no camera roll");
+    }
+  });
 });
