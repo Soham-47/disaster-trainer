@@ -64,7 +64,11 @@ export function useLingBotFireController(providedSession?: LingBotSessionPort): 
   const setNavigation = useCallback((input: LingBotNavigationInput) => { void session.setNavigation(input).catch(() => undefined); }, [session]);
 
   const start = useCallback(async () => {
-    if (runtimeRef.current.phase !== "booting") return;
+    if (runtimeRef.current.phase !== "booting" && runtimeRef.current.phase !== "fatal") return;
+    if (runtimeRef.current.phase === "fatal") {
+      runtimeRef.current = createFireRuntime();
+      setRuntime(runtimeRef.current);
+    }
     setStartupError(null);
     try {
       const activeSession = typeof window !== "undefined" && shouldUseMock(window.location.search, process.env.NODE_ENV)
