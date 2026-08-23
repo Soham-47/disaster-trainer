@@ -24,7 +24,12 @@ type Waiter<T> = {
 };
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  return String(error);
 }
 
 export class LingBotSession implements LingBotSessionPort {
@@ -35,8 +40,19 @@ export class LingBotSession implements LingBotSessionPort {
   private lastError: Error | null = null;
   private generationActive = false;
   private operationTail: Promise<void> = Promise.resolve();
+  private connecting: Promise<void> | null = null;
 
-  async connect(): Promise<void> {
+  connect(): Promise<void> {
+    if (this.model?.getStatus() === "ready") return Promise.resolve();
+    if (this.connecting) return this.connecting;
+    const pending = this.connectOnce().finally(() => {
+      if (this.connecting === pending) this.connecting = null;
+    });
+    this.connecting = pending;
+    return pending;
+  }
+
+  private async connectOnce(): Promise<void> {
     if (this.model?.getStatus() === "ready") return;
     if (this.model) await this.disconnect();
 
@@ -45,6 +61,16 @@ export class LingBotSession implements LingBotSessionPort {
     this.model = model;
     this.track(model.onCommandError((message) => {
       this.failPending(new LingBotCommandError(message.command, message.reason));
+    }));
+    // The SDK can deliver the recvonly main-video track while the WebRTC
+    // connection is becoming ready. Capture it before connect() resolves so
+    // render() cannot miss the one-shot trackReceived event.
+    const videoSubscription = this.track(model.onMainVideo((_track, stream) => {
+      if (!isMediaStreamLike(stream)) {
+        this.failPending(new LingBotTransportError("LingBot main video event did not contain a MediaStream"));
+        return;
+      }
+      this.stream = stream;
     }));
     const onTransportError = (error: unknown) => {
       this.failPending(new LingBotTransportError(`LingBot transport failed: ${errorMessage(error)}`, error));
@@ -68,6 +94,8 @@ export class LingBotSession implements LingBotSessionPort {
     } catch (error) {
       await this.disconnect().catch(() => undefined);
       throw error;
+    } finally {
+      videoSubscription();
     }
   }
 
@@ -305,6 +333,9 @@ export class LingBotSession implements LingBotSessionPort {
 
   private waitForVideo(timeoutMs: number): Waiter<MediaStream> {
     const model = this.requireModel();
+    if (this.stream) {
+      return { promise: Promise.resolve(this.stream), cancel: () => undefined };
+    }
     return this.createWaiter<MediaStream>(
       (resolve, reject) => model.onMainVideo((_track, stream) => {
         if (!isMediaStreamLike(stream)) {

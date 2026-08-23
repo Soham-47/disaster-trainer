@@ -15,6 +15,7 @@ const sdk = vi.hoisted(() => {
     imageCommandReject: false,
     promptCommandReject: false,
     startCommandReject: false,
+    connectTransportErrorMessage: null as string | null,
   };
   const instances: FakeLingbotWorld2Model[] = [];
 
@@ -74,6 +75,10 @@ const sdk = vi.hoisted(() => {
     async connect(token: string) {
       this.record("connect", token, "statusChanged");
       this.status = "connecting";
+      if (config.connectTransportErrorMessage) {
+        this.emit("error", { message: config.connectTransportErrorMessage });
+        return;
+      }
       if (config.autoReady) this.becomeReady();
     }
 
@@ -229,6 +234,7 @@ describe("LingBotSession", () => {
       imageCommandReject: false,
       promptCommandReject: false,
       startCommandReject: false,
+      connectTransportErrorMessage: null,
     });
     vi.unstubAllGlobals();
   });
@@ -258,6 +264,25 @@ describe("LingBotSession", () => {
     await rendering;
     expect(receipt).toMatchObject({ jobId: 7, firstChunkIndex: 3 });
     expect(session.getStream()).toMatchObject({ id: "stream-1" });
+  });
+
+  it("uses the main video track received while connecting", async () => {
+    sdk.config.autoVideo = false;
+    sdk.config.autoReady = false;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ token: "jwt-test", mode: "live" }),
+    }));
+    const session = new LingBotSession();
+    const connecting = session.connect();
+    await vi.waitFor(() => expect(sdk.instances).toHaveLength(1));
+    const model = sdk.instances.at(-1)!;
+    model.emitVideo({ id: "stream-from-connect", getTracks: () => [] });
+    model.becomeReady();
+    await connecting;
+
+    await expect(session.render(makeJob(), reference)).resolves.toMatchObject({ jobId: 7 });
+    expect(session.getStream()).toMatchObject({ id: "stream-from-connect" });
   });
 
   it("rejects a main-video event that does not contain a MediaStream-like payload", async () => {
@@ -312,6 +337,37 @@ describe("LingBotSession", () => {
       lookVertical: "up",
     });
     expect(model.commands.filter(({ name }) => name.startsWith("setMove") || name.startsWith("setLook"))).toHaveLength(4);
+  });
+
+  it("coalesces concurrent connection attempts into one Reactor session", async () => {
+    sdk.config.autoReady = false;
+    const fetchToken = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ token: "jwt-test", mode: "live" }),
+    });
+    vi.stubGlobal("fetch", fetchToken);
+    const session = new LingBotSession();
+
+    const first = session.connect();
+    const second = session.connect();
+
+    expect(fetchToken).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(sdk.instances).toHaveLength(1));
+    sdk.instances[0].becomeReady();
+    await Promise.all([first, second]);
+    expect(sdk.instances[0].commands.filter(({ name }) => name === "connect")).toHaveLength(1);
+  });
+
+  it("preserves a structured Reactor transport error message", async () => {
+    sdk.config.connectTransportErrorMessage = "quota exceeded: concurrent_sessions (limit=5, current=5)";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ token: "jwt-test", mode: "live" }),
+    }));
+
+    await expect(new LingBotSession().connect()).rejects.toThrow(
+      "quota exceeded: concurrent_sessions (limit=5, current=5)",
+    );
   });
 
   it("resets and restarts with the supplied file reference and seed", async () => {
