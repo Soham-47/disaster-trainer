@@ -5,6 +5,7 @@ import {
   ReactorEventListener,
   WorldModelStatus,
 } from "./events";
+import { formatReactorError } from "./errors";
 
 export type { WorldModelStatus };
 
@@ -240,9 +241,9 @@ export class ReactorClient implements WorldModelAdapter {
       this.token = data.token;
       this.currentMode = "live";
       return { token: data.token, mode: "live" };
-    } catch (err: any) {
+    } catch (err: unknown) {
       clearTimeout(timeoutId);
-      throw new Error(`Token exchange failed: ${err.message || err}`);
+      throw new Error(`Token exchange failed: ${formatReactorError(err)}`);
     }
   }
 
@@ -388,7 +389,7 @@ export class ReactorClient implements WorldModelAdapter {
       });
 
       model.on("error", (err: unknown) => {
-        const reason = `Reactor transport error: ${err instanceof Error ? err.message : String(err)}`;
+        const reason = `Reactor transport error: ${formatReactorError(err)}`;
         console.warn("[ReactorClient] Transport/SDK Error:", err);
         if (this.startupInProgress) {
           this.rejectStartupFailure?.(new Error(reason));
@@ -464,8 +465,8 @@ export class ReactorClient implements WorldModelAdapter {
       this.startupInProgress = false;
       this.startupFailurePromise = null;
       this.rejectStartupFailure = null;
-    } catch (err: any) {
-      const startupReason = `Live startup failed: ${err.message || err}`;
+    } catch (err: unknown) {
+      const startupReason = `Live startup failed: ${formatReactorError(err)}`;
       this.fallbackReason = startupReason;
       console.warn("[ReactorClient]", startupReason);
       this.startupInProgress = false;
@@ -497,7 +498,7 @@ export class ReactorClient implements WorldModelAdapter {
       } catch (err) {
         await this.useFallback(
           this.activeFallbackAsset || "/fallbacks/fire-bedroom-orient.mp4",
-          `Pause failed: ${err instanceof Error ? err.message : String(err)}`
+          `Pause failed: ${formatReactorError(err)}`
         );
         throw err;
       }
@@ -525,7 +526,7 @@ export class ReactorClient implements WorldModelAdapter {
       } catch (err) {
         await this.useFallback(
           this.activeFallbackAsset || "/fallbacks/fire-bedroom-orient.mp4",
-          `Resume failed: ${err instanceof Error ? err.message : String(err)}`
+          `Resume failed: ${formatReactorError(err)}`
         );
         throw err;
       }
@@ -560,7 +561,7 @@ export class ReactorClient implements WorldModelAdapter {
       } catch (err) {
         await this.useFallback(
           this.activeFallbackAsset || "/fallbacks/fire-bedroom-orient.mp4",
-          `Prompt change failed: ${err instanceof Error ? err.message : String(err)}`
+          `Prompt change failed: ${formatReactorError(err)}`
         );
         throw err;
       }

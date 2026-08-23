@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { reactorClient, WorldModelStatus } from "@/lib/reactor/client";
+import { getViewportMediaMode } from "@/lib/player/viewport-media";
 
 interface WorldViewportProps {
   status: WorldModelStatus;
@@ -33,14 +35,20 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const fallbackVideoRef = useRef<HTMLVideoElement>(null);
-  const animFrameRef = useRef<number | null>(null);
   const capturedForPauseRef = useRef<boolean>(false);
   const [localFrameUrl, setLocalFrameUrl] = useState<string | null>(capturedFrameUrl || null);
   const [liveVideoReady, setLiveVideoReady] = useState(false);
   const [pageVisible, setPageVisible] = useState(true);
-  const [reducedMotion, setReducedMotion] = useState(false);
-  const showFallbackVideo = mode === "fallback" && Boolean(fallbackAsset);
-  const liveVideoVisible = mode === "live" && Boolean(liveStream) && liveVideoReady;
+  const mediaMode = getViewportMediaMode({
+    mode,
+    liveStream: Boolean(liveStream),
+    liveVideoReady,
+    fallbackAsset: fallbackAsset || null,
+  });
+  const showFallbackVideo = mediaMode === "fallback-video";
+  const showFallbackImage = mediaMode === "fallback-image";
+  const liveVideoVisible = mediaMode === "live-video";
+  const showFallbackMedia = showFallbackVideo || showFallbackImage;
 
   useEffect(() => {
     if (capturedFrameUrl) {
@@ -74,15 +82,10 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
 
   useEffect(() => {
     const updateVisibility = () => setPageVisible(document.visibilityState === "visible");
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const updateMotion = () => setReducedMotion(media.matches);
     updateVisibility();
-    updateMotion();
     document.addEventListener("visibilitychange", updateVisibility);
-    media.addEventListener?.("change", updateMotion);
     return () => {
       document.removeEventListener("visibilitychange", updateVisibility);
-      media.removeEventListener?.("change", updateMotion);
     };
   }, []);
 
@@ -137,9 +140,9 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
   const isUnsafeBranch = visualBranch === "unsafe";
   const isSafeBranch = visualBranch === "safe";
 
-  // 60fps Dynamic Atmospheric Renderer
+  // Live mode must never invent a disaster scene while the model track is absent.
   useEffect(() => {
-    if (showFallbackVideo || liveVideoVisible || !pageVisible) return;
+    if (mediaMode !== "waiting" || !pageVisible) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -151,212 +154,22 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
     const height = 720;
     canvas.width = width;
     canvas.height = height;
+    ctx.fillStyle = "#09090b";
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = "#a1a1aa";
+    ctx.font = "600 24px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("Waiting for live LingBot video…", width / 2, height / 2 - 12);
+    ctx.font = "14px sans-serif";
+    ctx.fillStyle = "#71717a";
+    ctx.fillText("The selected disaster will appear when the model publishes a video track.", width / 2, height / 2 + 22);
+    ctx.textAlign = "start";
 
-    // Particle arrays
-    const smokeParticles: Array<{
-      x: number;
-      y: number;
-      size: number;
-      speedX: number;
-      speedY: number;
-      opacity: number;
-    }> = [];
-    const fireParticles: Array<{
-      x: number;
-      y: number;
-      size: number;
-      speedY: number;
-      color: string;
-    }> = [];
-
-    // Initialize smoke
-    for (let i = 0; i < 50; i++) {
-      smokeParticles.push({
-        x: Math.random() * width,
-        y: height * 0.4 + Math.random() * (height * 0.6),
-        size: 40 + Math.random() * 90,
-        speedX: -1 + Math.random() * 2,
-        speedY: -0.8 - Math.random() * 1.5,
-        opacity: 0.15 + Math.random() * 0.4,
-      });
-    }
-
-    // Initialize fire particles for unsafe branch
-    for (let i = 0; i < 40; i++) {
-      fireParticles.push({
-        x: width * 0.4 + Math.random() * (width * 0.2),
-        y: height * 0.3 + Math.random() * (height * 0.5),
-        size: 15 + Math.random() * 35,
-        speedY: -2 - Math.random() * 4,
-        color: Math.random() > 0.4 ? "#ef4444" : "#f59e0b",
-      });
-    }
-
-    const startTime = Date.now();
-
-    const render = () => {
-      const elapsed = (Date.now() - startTime) / 1000;
-
-      // Base background color
-      if (isUnsafeBranch) {
-        ctx.fillStyle = "#1c0505"; // Deep fiery red
-      } else if (isSafeBranch) {
-        ctx.fillStyle = "#030712"; // Deep cool dark blue
-      } else {
-        ctx.fillStyle = "#0c0a09"; // Dark bedroom
-      }
+    if (isRewinding) {
+      ctx.fillStyle = "rgba(245, 158, 11, 0.25)";
       ctx.fillRect(0, 0, width, height);
-
-      const doorWidth = 240;
-      const doorHeight = 480;
-      const doorX = (width - doorWidth) / 2;
-      const doorY = height - doorHeight - 30;
-
-      // Draw Door Frame
-      ctx.fillStyle = isUnsafeBranch ? "#450a0a" : "#262626";
-      ctx.fillRect(doorX - 16, doorY - 16, doorWidth + 32, doorHeight + 16);
-
-      if (isUnsafeBranch) {
-        // UNSAFE BRANCH: Door is open, raging hallway fire and thick black smoke fill viewport
-        const flameGrad = ctx.createLinearGradient(doorX, doorY, doorX + doorWidth, doorY + doorHeight);
-        flameGrad.addColorStop(0, "#f97316");
-        flameGrad.addColorStop(0.5, "#ef4444");
-        flameGrad.addColorStop(1, "#7f1d1d");
-        ctx.fillStyle = flameGrad;
-        ctx.fillRect(doorX, doorY, doorWidth, doorHeight);
-
-        // Animate Fire Particles in doorway
-        fireParticles.forEach((fp) => {
-          fp.y += fp.speedY;
-          if (fp.y < doorY) {
-            fp.y = doorY + doorHeight;
-            fp.x = doorX + Math.random() * doorWidth;
-          }
-          ctx.fillStyle = fp.color;
-          ctx.beginPath();
-          ctx.arc(fp.x, fp.y, fp.size, 0, Math.PI * 2);
-          ctx.fill();
-        });
-
-        // Heavy dark smoke overlay filling room
-        ctx.fillStyle = "rgba(15, 15, 15, 0.65)";
-        ctx.fillRect(0, 0, width, height);
-      } else if (isSafeBranch) {
-        // SAFE BRANCH: Door closed, wet towel at door gap, cool window safety light
-        const doorGrad = ctx.createLinearGradient(doorX, doorY, doorX + doorWidth, doorY + doorHeight);
-        doorGrad.addColorStop(0, "#1e293b");
-        doorGrad.addColorStop(1, "#0f172a");
-        ctx.fillStyle = doorGrad;
-        ctx.fillRect(doorX, doorY, doorWidth, doorHeight);
-
-        // Wet towel rolled at door base gap
-        ctx.fillStyle = "#334155";
-        ctx.beginPath();
-        ctx.roundRect(doorX - 10, doorY + doorHeight - 12, doorWidth + 20, 18, 8);
-        ctx.fill();
-
-        // Safety Label on towel
-        ctx.fillStyle = "#38bdf8";
-        ctx.font = "11px monospace";
-        ctx.fillText("SEALED WITH WET TOWEL", doorX + 35, doorY + doorHeight + 2);
-
-        // Cool Window Light Ray from side
-        const windowGrad = ctx.createLinearGradient(width, 0, 0, height);
-        windowGrad.addColorStop(0, "rgba(56, 189, 248, 0.25)");
-        windowGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
-        ctx.fillStyle = windowGrad;
-        ctx.fillRect(0, 0, width, height);
-      } else {
-        // ORIENT / INITIAL STATE: Door closed, warm glow underneath, alarm flashing
-        const doorGrad = ctx.createLinearGradient(doorX, doorY, doorX + doorWidth, doorY + doorHeight);
-        doorGrad.addColorStop(0, "#171717");
-        doorGrad.addColorStop(1, "#0a0a0a");
-        ctx.fillStyle = doorGrad;
-        ctx.fillRect(doorX, doorY, doorWidth, doorHeight);
-
-        // Door Knob
-        ctx.beginPath();
-        ctx.arc(doorX + doorWidth - 30, doorY + doorHeight * 0.55, 10, 0, Math.PI * 2);
-        ctx.fillStyle = "#f59e0b"; // Warm door handle
-        ctx.fill();
-
-        // Warm Red Heat Glow behind door base gap
-        ctx.save();
-        ctx.shadowColor = "#ef4444";
-        ctx.shadowBlur = 30 + Math.sin(elapsed * 5) * 15;
-        ctx.fillStyle = "rgba(239, 68, 68, 0.6)";
-        ctx.fillRect(doorX, doorY + doorHeight - 4, doorWidth, 6);
-        ctx.restore();
-      }
-
-      // Render Drifting Smoke Layer
-      smokeParticles.forEach((sp) => {
-        sp.x += sp.speedX;
-        sp.y += sp.speedY;
-        if (sp.y < height * 0.1) {
-          sp.y = height - 10;
-          sp.x = doorX - 80 + Math.random() * (doorWidth + 160);
-        }
-
-        const g = ctx.createRadialGradient(sp.x, sp.y, 0, sp.x, sp.y, sp.size);
-        const colorStr = isUnsafeBranch ? "180, 50, 40" : "120, 113, 108";
-        g.addColorStop(0, `rgba(${colorStr}, ${sp.opacity})`);
-        g.addColorStop(1, "rgba(20, 20, 20, 0)");
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(sp.x, sp.y, sp.size, 0, Math.PI * 2);
-        ctx.fill();
-      });
-
-      // Emergency Light Flashing
-      const flash = Math.sin(elapsed * 6) > 0.4;
-      if (flash && !isSafeBranch) {
-        const alarmGrad = ctx.createRadialGradient(
-          doorX + doorWidth / 2,
-          doorY - 30,
-          10,
-          doorX + doorWidth / 2,
-          doorY - 30,
-          600
-        );
-        alarmGrad.addColorStop(0, "rgba(239, 68, 68, 0.3)");
-        alarmGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
-        ctx.fillStyle = alarmGrad;
-        ctx.fillRect(0, 0, width, height);
-
-        ctx.beginPath();
-        ctx.arc(doorX + doorWidth / 2, doorY - 30, 8, 0, Math.PI * 2);
-        ctx.fillStyle = "#ef4444";
-        ctx.fill();
-      }
-
-      // Rewind Glitch Effect
-      if (isRewinding) {
-        ctx.fillStyle = "rgba(245, 158, 11, 0.25)";
-        ctx.fillRect(0, 0, width, height);
-
-        ctx.strokeStyle = "rgba(245, 158, 11, 0.6)";
-        ctx.lineWidth = 3;
-        const lineY = (elapsed * 1200) % height;
-        ctx.beginPath();
-        ctx.moveTo(0, lineY);
-        ctx.lineTo(width, lineY);
-        ctx.stroke();
-      }
-
-      if (!reducedMotion) {
-        animFrameRef.current = requestAnimationFrame(render);
-      }
-    };
-
-    render();
-
-    return () => {
-      if (animFrameRef.current) {
-        cancelAnimationFrame(animFrameRef.current);
-      }
-    };
-  }, [status, isRewinding, isUnsafeBranch, isSafeBranch, liveVideoVisible, pageVisible, reducedMotion, showFallbackVideo]);
+    }
+  }, [isRewinding, mediaMode, pageVisible]);
 
   return (
     <div
@@ -393,11 +206,22 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
         />
       )}
 
-      {/* Atmospheric World Canvas (Active when no live video stream or during synthetic orient) */}
+      {showFallbackImage && (
+        <Image
+          src={fallbackAsset}
+          alt="Prepared disaster continuation"
+          fill
+          unoptimized
+          sizes="100vw"
+          className="absolute inset-0 z-10 h-full w-full object-cover"
+        />
+      )}
+
+      {/* Neutral waiting canvas shown only until a live track or prepared fallback media is ready */}
       <canvas
         ref={canvasRef}
         className={`absolute inset-0 w-full h-full object-cover transition-all duration-700 ${
-          showFallbackVideo || liveVideoVisible
+          showFallbackMedia || liveVideoVisible
             ? "opacity-0"
             : status === "paused"
             ? "opacity-75"
@@ -413,9 +237,12 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
           }`}
         >
           {localFrameUrl && (
-            <img
+            <Image
               src={localFrameUrl}
               alt="Captured Decision Context Frame"
+              fill
+              unoptimized
+              sizes="100vw"
               className={`w-full h-full object-cover ${
                 isRewinding ? "scale-105 filter saturate-150 contrast-125 invert-10" : ""
               }`}

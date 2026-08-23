@@ -19,24 +19,24 @@ export function EntryScreen({ onStart, disabled = false, errorMessage = null }: 
         See the choice. Then see the other future.
       </h1>
       <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-neutral-300">
-        Describe the world you want to enter, make one constrained decision, experience its consequence, rewind, and test what you learned in a new setting.
+        Describe a disaster situation, make one constrained decision, experience its consequence, rewind, and test what you learned in a new setting.
       </p>
       <div className="mx-auto mt-8 max-w-2xl text-left">
         <label htmlFor="scenario-brief" className="text-xs font-mono uppercase tracking-[0.2em] text-neutral-400">
-          Describe the visual situation (optional)
+          Describe the disaster situation (optional)
         </label>
         <textarea
           id="scenario-brief"
           value={brief}
           maxLength={MAX_SCENARIO_BRIEF_LENGTH}
           onChange={(event) => setBrief(event.target.value)}
-          placeholder="Example: A smoky underground station during a blackout, viewed from a passenger's eye level."
+          placeholder="Example: Night earthquake in a high-rise with shaking furniture and rattling windows."
           rows={3}
           className="mt-2 w-full resize-none rounded-xl border border-neutral-700 bg-neutral-950/80 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-neutral-600 focus:border-amber-300 focus:ring-2 focus:ring-amber-200/30"
           disabled={disabled}
         />
         <div className="mt-2 flex justify-between gap-4 text-xs text-neutral-500">
-          <span>Shapes visuals and camera atmosphere only; safety choices stay controlled.</span>
+          <span>Starter library: fire, earthquake, flood, wildfire, and cyclone. Safety choices stay controlled.</span>
           <span>{brief.length}/{MAX_SCENARIO_BRIEF_LENGTH}</span>
         </div>
       </div>

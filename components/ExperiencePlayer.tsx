@@ -17,6 +17,7 @@ import type { ChoiceDefinition, GeneratedScenario } from "@/lib/scenario/types";
 import type { SessionResult } from "@/lib/scenario/types";
 import { scoreSession } from "@/lib/scenario/scoring";
 import { buildWorldModelPrompt, normalizeScenarioBrief } from "@/lib/scenario/prompt";
+import { resolveScenarioSelection } from "@/lib/scenario/registry";
 import { playAlternative as playAlternativeBranch, playConsequence } from "@/lib/player/world-actions";
 
 type ExperiencePlayerProps = {
@@ -51,6 +52,8 @@ export function ExperiencePlayer({
   const [status, setStatus] = useState<WorldModelStatus>(
     (adapter as WorldModelAdapter & { getStatus?: () => WorldModelStatus }).getStatus?.() ?? "idle"
   );
+  const [activeScenario, setActiveScenario] = useState(scenario);
+  const [activeTransferScenario, setActiveTransferScenario] = useState(transferScenario);
   const [mode, setMode] = useState<"live" | "fallback">(modeOf(adapter));
   const [fallbackReason, setFallbackReason] = useState<string | null>(fallbackReasonOf(adapter));
   const [activeAsset, setActiveAsset] = useState(scenario.orientFallbackAsset);
@@ -127,13 +130,22 @@ export function ExperiencePlayer({
 
   const startScenario = async (brief: string) => {
     const normalizedBrief = normalizeScenarioBrief(brief);
+    const selection = resolveScenarioSelection(normalizedBrief);
     setScenarioBrief(normalizedBrief);
     setStartupError(null);
     setSessionResult(null);
+
+    if (!selection) {
+      setStartupError("That disaster is not in the reviewed starter library yet. Try a structure fire, earthquake, flash flood, wildfire, or cyclone.");
+      return;
+    }
+
     setPending(true);
     try {
-      await startAdapter(scenario, normalizedBrief);
-      dispatch({ type: "START_SCENARIO", scenarioId: scenario.id });
+      setActiveScenario(selection.scenario);
+      setActiveTransferScenario(selection.transferScenario);
+      await startAdapter(selection.scenario, normalizedBrief);
+      dispatch({ type: "START_SCENARIO", scenarioId: selection.scenario.id });
     } catch (error) {
       setStartupError(error instanceof Error ? error.message : "Unable to connect to LingBot");
     } finally {
@@ -145,7 +157,7 @@ export function ExperiencePlayer({
     if (pending || player.current !== "decision") return;
     setPending(true);
     dispatch({ type: "SELECT_CHOICE", choiceId: choice.id });
-    const consequence = scenario.consequences[choice.consequenceStateId];
+    const consequence = activeScenario.consequences[choice.consequenceStateId];
     const consequencePrompt = buildWorldModelPrompt(consequence.prompt, scenarioBrief);
     setVisualBranch(choice.safetyClass === "unsafe" ? "unsafe" : "safe");
     setAmbientPrompt(consequencePrompt);
@@ -177,13 +189,13 @@ export function ExperiencePlayer({
   }, []);
 
   const alternativeChoice = useMemo(() => {
-    return scenario.decision.choices.find((choice) => choice.id !== player.initialChoiceId) ?? scenario.decision.choices[0];
-  }, [player.initialChoiceId, scenario.decision.choices]);
+    return activeScenario.decision.choices.find((choice) => choice.id !== player.initialChoiceId) ?? activeScenario.decision.choices[0];
+  }, [activeScenario.decision.choices, player.initialChoiceId]);
 
   const playAlternative = async () => {
     if (pending || !alternativeChoice) return;
     setPending(true);
-    const consequence = scenario.consequences[alternativeChoice.consequenceStateId];
+    const consequence = activeScenario.consequences[alternativeChoice.consequenceStateId];
     const consequencePrompt = buildWorldModelPrompt(consequence.prompt, scenarioBrief);
     setVisualBranch(alternativeChoice.safetyClass === "unsafe" ? "unsafe" : "safe");
     setAmbientPrompt(consequencePrompt);
@@ -201,7 +213,7 @@ export function ExperiencePlayer({
   const startTransfer = async () => {
     setPending(true);
     try {
-      await startAdapter(transferScenario, scenarioBrief);
+      await startAdapter(activeTransferScenario, scenarioBrief);
       dispatch({ type: "DEBRIEF_NEXT" });
     } catch (error) {
       dispatch({ type: "FAIL", error: error instanceof Error ? error.message : "Unable to start transfer" });
@@ -214,11 +226,11 @@ export function ExperiencePlayer({
     if (pending || player.current !== "transfer") return;
     setPending(true);
     dispatch({ type: "SUBMIT_TRANSFER", choiceId: choice.id });
-    const initialChoice = scenario.decision.choices.find((candidate) => candidate.id === player.initialChoiceId);
+    const initialChoice = activeScenario.decision.choices.find((candidate) => candidate.id === player.initialChoiceId);
     if (initialChoice && player.startedAt) {
       setSessionResult(scoreSession({
-        sessionId: `${scenario.id}-${player.startedAt}`,
-        scenarioId: scenario.id,
+        sessionId: `${activeScenario.id}-${player.startedAt}`,
+        scenarioId: activeScenario.id,
         initialChoice,
         transferChoice: choice,
         generationMode: modeOf(adapter),
@@ -238,6 +250,8 @@ export function ExperiencePlayer({
     setPending(true);
     await adapter.reset();
     dispatch({ type: "RESTART" });
+    setActiveScenario(scenario);
+    setActiveTransferScenario(transferScenario);
     setSessionResult(null);
     setStatus("idle");
     setMode("live");
@@ -251,8 +265,8 @@ export function ExperiencePlayer({
     setPending(false);
   };
 
-  const initialChoice = scenario.decision.choices.find((choice) => choice.id === player.initialChoiceId);
-  const transferChoice = transferScenario.decision.choices.find((choice) => choice.id === player.transferChoiceId);
+  const initialChoice = activeScenario.decision.choices.find((choice) => choice.id === player.initialChoiceId);
+  const transferChoice = activeTransferScenario.decision.choices.find((choice) => choice.id === player.transferChoiceId);
   const statePanel = (() => {
     switch (player.current) {
       case "entry":
@@ -262,12 +276,12 @@ export function ExperiencePlayer({
           <section className="rounded-2xl border border-neutral-800 bg-neutral-950/90 p-5 shadow-2xl">
             <p className="text-[10px] font-mono uppercase tracking-[0.24em] text-amber-300">Orient</p>
             <h2 className="mt-2 text-xl font-semibold text-white">Notice what the environment is telling you.</h2>
-            <p className="mt-3 text-sm leading-6 text-neutral-300">{scenario.cues.map((cue) => cue.learnerCopy).join(" ")}</p>
+            <p className="mt-3 text-sm leading-6 text-neutral-300">{activeScenario.cues.map((cue) => cue.learnerCopy).join(" ")}</p>
             <button type="button" disabled={pending} onClick={() => dispatch({ type: "ORIENT_COMPLETE" })} className="mt-5 w-full rounded-xl bg-amber-400 px-4 py-3 text-sm font-bold text-neutral-950 transition hover:bg-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-200 disabled:opacity-50">Continue to the decision</button>
           </section>
         );
       case "decision":
-        return <DecisionOverlay decision={scenario.decision} onSelect={(choice) => void selectInitialChoice(choice)} disabled={pending} />;
+        return <DecisionOverlay decision={activeScenario.decision} onSelect={(choice) => void selectInitialChoice(choice)} disabled={pending} />;
       case "consequence":
         return (
           <section className="rounded-2xl border border-rose-400/30 bg-neutral-950/95 p-5 shadow-2xl">
@@ -293,9 +307,9 @@ export function ExperiencePlayer({
           </section>
         );
       case "debrief":
-        return <Debrief scenario={scenario} onContinue={() => void startTransfer()} />;
+        return <Debrief scenario={activeScenario} onContinue={() => void startTransfer()} />;
       case "transfer":
-        return <TransferCheck scenario={transferScenario} onSelect={(choice) => void submitTransfer(choice)} disabled={pending} />;
+        return <TransferCheck scenario={activeTransferScenario} onSelect={(choice) => void submitTransfer(choice)} disabled={pending} />;
       case "result":
         return <ResultView initialChoiceLabel={initialChoice?.label ?? "Not recorded"} transferChoiceLabel={transferChoice?.label ?? "Not recorded"} generationMode={mode} sessionResult={sessionResult} onRestart={() => void restart()} />;
       case "error":

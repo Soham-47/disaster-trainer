@@ -15,28 +15,28 @@ Reactor/LingBot World 2 renders the environment and visual futures. A determinis
 - Track: **Interactive Media**
 - Event: **Inception Series: Hackathon 2.0**
 - Status: Greenfield prototype
-- Current MVP: one validated structure-fire scenario with generated environment variations
+- Current MVP: five reviewed disaster scenario packs with generated environment variations
 - Primary model platform: [Reactor](https://www.reactor.inc/)
 - Model: [LingBot World 2](https://www.reactor.inc/models/lingbot-world-2/api)
 
 ## MVP experience
 
-1. Orient inside a live generated bedroom, hotel room, or office.
-2. Notice smoke and a warm closed door.
-3. Choose between opening the door or keeping it closed and calling/signalling for help.
+1. Describe one of the supported disaster families: structure fire, earthquake, flash flood, wildfire, or cyclone.
+2. Orient inside the selected live generated environment.
+3. Notice the pack's authored warning cue and choose between two constrained actions.
 4. Experience the chosen future.
 5. Rewind to the decision.
 6. Experience the counterfactual future.
 7. Read a sourced debrief.
 8. Make a transfer decision in a different environment.
 
-The MVP deliberately keeps choices constrained. Scenario breadth comes from reviewed combinations of disaster pack, environment, time, occupancy, infrastructure condition, and complication.
+The MVP deliberately keeps choices constrained. Scenario breadth comes from reviewed combinations of disaster pack, environment, time, occupancy, infrastructure condition, and complication. Descriptions outside the five reviewed families are rejected at the entry screen instead of being silently mapped to fire.
 
 ## Safety boundary
 
 The world model is a renderer, not the safety authority. Safety rules and scoring are deterministic and human-authored. If generated output contradicts the controlled scenario, times out, or becomes unavailable, the experience switches to an approved fallback continuation and marks the run unscored.
 
-The fire scenario is grounded in [American Red Cross home-fire guidance](https://www.redcross.org/content/dam/redcross/atg/PDF_s/Preparedness___Disaster_Recovery/Disaster_Preparedness/Home_Fire/FireFAQs.pdf).
+The initial packs are grounded in the following public guidance: [American Red Cross home-fire guidance](https://www.redcross.org/content/dam/redcross/atg/PDF_s/Preparedness___Disaster_Recovery/Disaster_Preparedness/Home_Fire/FireFAQs.pdf), [FEMA earthquake guidance](https://www.ready.gov/sites/default/files/2024-03/ready.gov_earthquake_hazard-info-sheet.pdf), [Ready.gov floods](https://www.ready.gov/floods), [FEMA wildfire guidance](https://www.ready.gov/sites/default/files/2024-08/ready-gov_wildfire_info-sheet.pdf), and [FEMA hurricane guidance](https://www.ready.gov/sites/default/files/2024-03/ready.gov_hurricane_hazard-info-sheet.pdf).
 
 This is an experimental preparedness-practice prototype, not certified training or a physically exact disaster simulator.
 
