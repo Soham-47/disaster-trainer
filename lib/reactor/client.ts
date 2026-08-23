@@ -6,6 +6,7 @@ import {
   WorldModelStatus,
 } from "./events";
 import { formatReactorError } from "./errors";
+import type { SceneSpec } from "@/lib/scenario/types";
 
 export type { WorldModelStatus };
 
@@ -14,7 +15,17 @@ export type WorldModelAdapterInput = {
   prompt: string;
   seed: number;
   fallbackAsset?: string;
+  attentionWindow?: "small" | "large" | "auto";
   onFrame?: (frame: unknown) => void;
+};
+
+export type WorldModelNavigationInput = {
+  forward: boolean;
+  backward: boolean;
+  left: boolean;
+  right: boolean;
+  lookHorizontal: "left" | "right" | "idle";
+  lookVertical: "up" | "down" | "idle";
 };
 
 /** Remote session setup and first-frame generation can outlive a local UI request. */
@@ -35,6 +46,17 @@ export type WorldModelAdapter = {
   applyPrompt(prompt: string): Promise<void>;
   reset(): Promise<void>;
   useFallback(asset: string): Promise<void>;
+  setNavigation(input: WorldModelNavigationInput): Promise<void>;
+  stopNavigation(): Promise<void>;
+  applySceneDelta(scene: SceneSpec): Promise<void>;
+  captureCheckpoint(): Promise<string>;
+  restartFromCheckpoint(input: {
+    frameDataUrl: string;
+    prompt: string;
+    seed: number;
+    attentionWindow: "small" | "large" | "auto";
+    fallbackAsset: string;
+  }): Promise<void>;
   onStatus(listener: (status: WorldModelStatus) => void): () => void;
 };
 
@@ -450,6 +472,10 @@ export class ReactorClient implements WorldModelAdapter {
             "prompt acceptance"
           );
           await model.setSeed({ seed: this.currentSeed });
+          const modelWithAttention = model as LingbotWorld2Model & { setAttnWindow?: (params: { attn_window: "small" | "large" | "auto" }) => Promise<void> };
+          if (modelWithAttention.setAttnWindow && input.attentionWindow) {
+            await modelWithAttention.setAttnWindow({ attn_window: input.attentionWindow });
+          }
           await model.setPrompt({ prompt: this.currentPrompt });
           await promptAccepted;
         })(),
@@ -580,6 +606,62 @@ export class ReactorClient implements WorldModelAdapter {
 
     await this.settleCleanup(model.reset());
     await this.settleCleanup(model.disconnect());
+  }
+
+  public async setNavigation(input: WorldModelNavigationInput): Promise<void> {
+    if (this.currentMode !== "live" || !this.model) return;
+    const model = this.model;
+    await Promise.all([
+      model.setMoveLongitudinal({ move_longitudinal: input.forward ? "forward" : input.backward ? "back" : "idle" }),
+      model.setMoveLateral({ move_lateral: input.left ? "strafe_left" : input.right ? "strafe_right" : "idle" }),
+      model.setLookHorizontal({ look_horizontal: input.lookHorizontal }),
+      model.setLookVertical({ look_vertical: input.lookVertical }),
+    ]);
+  }
+
+  public async stopNavigation(): Promise<void> {
+    await this.setNavigation({
+      forward: false,
+      backward: false,
+      left: false,
+      right: false,
+      lookHorizontal: "idle",
+      lookVertical: "idle",
+    });
+  }
+
+  public async applySceneDelta(scene: SceneSpec): Promise<void> {
+    await this.applyPrompt(`${scene.invariantPrompt} ${scene.deltaPrompt}`.trim());
+    if (this.currentMode === "live" && this.model) {
+      const model = this.model as LingbotWorld2Model & {
+        setAttnWindow?: (params: { attn_window: "small" | "large" | "auto" }) => Promise<void>;
+        triggerKvCacheReset?: () => Promise<void>;
+      };
+      await model.setAttnWindow?.({ attn_window: scene.attentionWindow });
+      await model.triggerKvCacheReset?.();
+    }
+  }
+
+  public async captureCheckpoint(): Promise<string> {
+    if (!this.capturedDecisionFrame) throw new Error("No model frame has been captured for this checkpoint");
+    return this.capturedDecisionFrame;
+  }
+
+  public async restartFromCheckpoint(input: {
+    frameDataUrl: string;
+    prompt: string;
+    seed: number;
+    attentionWindow: "small" | "large" | "auto";
+    fallbackAsset: string;
+  }): Promise<void> {
+    await this.start({
+      referenceImage: input.frameDataUrl,
+      prompt: input.prompt,
+      seed: input.seed,
+      attentionWindow: input.attentionWindow,
+      fallbackAsset: input.fallbackAsset,
+      onFrame: this.frameCallback,
+    });
   }
 
   public async reset(): Promise<void> {

@@ -40,4 +40,27 @@ describe("MockWorldModelAdapter", () => {
     expect(adapter.getActiveFallbackAsset()).toBe("/fallbacks/fire-bedroom-orient.mp4");
     expect(frame).toHaveBeenLastCalledWith(null);
   });
+
+  it("supports navigation and deterministic checkpoint restart", async () => {
+    const adapter = new MockWorldModelAdapter(0);
+    await adapter.start({
+      referenceImage: "/references/bedroom-fire.jpg",
+      prompt: "mock orient",
+      seed: 7,
+    });
+
+    await adapter.setNavigation({ forward: true, backward: false, left: false, right: false, lookHorizontal: "idle", lookVertical: "idle" });
+    await adapter.stopNavigation();
+    const frame = await adapter.captureCheckpoint();
+    await adapter.restartFromCheckpoint({
+      frameDataUrl: frame,
+      prompt: "mock consequence",
+      seed: 8,
+      attentionWindow: "small",
+      fallbackAsset: "/fallbacks/fire-bedroom-orient.mp4",
+    });
+
+    expect(frame).toMatch(/^data:image\/png/);
+    expect(adapter.getStatus()).toBe("generating");
+  });
 });

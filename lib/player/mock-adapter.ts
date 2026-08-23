@@ -3,6 +3,8 @@ import type {
   WorldModelAdapterInput,
 } from "@/lib/reactor/client";
 import type { WorldModelStatus } from "@/lib/reactor/events";
+import type { SceneSpec } from "@/lib/scenario/types";
+import type { WorldModelNavigationInput } from "@/lib/reactor/client";
 
 type AdapterMode = "live" | "fallback";
 
@@ -14,6 +16,14 @@ export class MockWorldModelAdapter implements WorldModelAdapter {
   private frameCallback?: (frame: unknown) => void;
   private readonly listeners = new Set<(status: WorldModelStatus) => void>();
   private readonly delayMs: number;
+  private navigation: WorldModelNavigationInput = {
+    forward: false,
+    backward: false,
+    left: false,
+    right: false,
+    lookHorizontal: "idle",
+    lookVertical: "idle",
+  };
 
   constructor(delayMs = 120) {
     this.delayMs = delayMs;
@@ -56,6 +66,26 @@ export class MockWorldModelAdapter implements WorldModelAdapter {
 
   async applyPrompt(_prompt: string): Promise<void> {
     // The mock intentionally acknowledges prompt changes without simulating video.
+  }
+
+  async setNavigation(input: WorldModelNavigationInput): Promise<void> {
+    this.navigation = { ...input };
+  }
+
+  async stopNavigation(): Promise<void> {
+    await this.setNavigation({ forward: false, backward: false, left: false, right: false, lookHorizontal: "idle", lookVertical: "idle" });
+  }
+
+  async applySceneDelta(_scene: SceneSpec): Promise<void> {
+    // The mock acknowledges deterministic scene changes without rendering video.
+  }
+
+  async captureCheckpoint(): Promise<string> {
+    return "data:image/png;base64,mock-checkpoint";
+  }
+
+  async restartFromCheckpoint(input: { frameDataUrl: string; prompt: string; seed: number; attentionWindow: "small" | "large" | "auto"; fallbackAsset: string }): Promise<void> {
+    await this.start({ referenceImage: input.frameDataUrl, prompt: input.prompt, seed: input.seed, fallbackAsset: input.fallbackAsset, onFrame: this.frameCallback, attentionWindow: input.attentionWindow });
   }
 
   async reset(): Promise<void> {

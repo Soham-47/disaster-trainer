@@ -3,7 +3,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { reactorClient, WorldModelStatus } from "@/lib/reactor/client";
+import type { WorldModelNavigationInput } from "@/lib/reactor/client";
 import { getViewportMediaMode } from "@/lib/player/viewport-media";
+import { idleNavigation, navigationFromKeys } from "@/lib/player/navigation";
 
 interface WorldViewportProps {
   status: WorldModelStatus;
@@ -17,6 +19,7 @@ interface WorldViewportProps {
   liveStream?: MediaStream | null;
   mode?: "live" | "fallback";
   onCapturedFrame?: (frameUrl: string) => void;
+  onNavigation?: (input: WorldModelNavigationInput) => void;
 }
 
 export const WorldViewport: React.FC<WorldViewportProps> = ({
@@ -31,6 +34,7 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
   liveStream,
   mode = "live",
   onCapturedFrame,
+  onNavigation,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -88,6 +92,43 @@ export const WorldViewport: React.FC<WorldViewportProps> = ({
       document.removeEventListener("visibilitychange", updateVisibility);
     };
   }, []);
+
+  useEffect(() => {
+    if (!onNavigation) return;
+    const pressedKeys = new Set<string>();
+    const navigationKeys = new Set(["w", "a", "s", "d", "W", "A", "S", "D", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]);
+    const isTextEntry = (target: EventTarget | null) => {
+      const element = target as HTMLElement | null;
+      return element?.tagName === "INPUT" || element?.tagName === "TEXTAREA" || element?.isContentEditable;
+    };
+    const update = () => onNavigation(navigationFromKeys(pressedKeys));
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!navigationKeys.has(event.key) || isTextEntry(event.target)) return;
+      event.preventDefault();
+      pressedKeys.add(event.key);
+      update();
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (!navigationKeys.has(event.key)) return;
+      pressedKeys.delete(event.key);
+      update();
+    };
+    const clear = () => {
+      pressedKeys.clear();
+      onNavigation(idleNavigation);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", clear);
+    document.addEventListener("visibilitychange", clear);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", clear);
+      document.removeEventListener("visibilitychange", clear);
+      clear();
+    };
+  }, [onNavigation]);
 
   // Reset captured flag when status changes out of paused
   useEffect(() => {
