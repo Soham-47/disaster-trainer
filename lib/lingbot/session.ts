@@ -33,6 +33,8 @@ export class LingBotSession implements LingBotSessionPort {
   private subscriptions = new Set<() => void>();
   private pendingRejectors = new Set<(error: Error) => void>();
   private lastError: Error | null = null;
+  private generationActive = false;
+  private operationTail: Promise<void> = Promise.resolve();
 
   async connect(): Promise<void> {
     if (this.model?.getStatus() === "ready") return;
@@ -79,26 +81,41 @@ export class LingBotSession implements LingBotSessionPort {
   }
 
   async render(job: LingBotRenderJob, reference: LingBotFileRef): Promise<LingBotRenderReceipt> {
-    const startedAt = Date.now();
-    const model = this.beginOperation();
-    if (job.kind !== "initial") await this.resetAndWait();
-    await this.runCommand(() => model.setSeed({ seed: job.scene.seed }), "set seed");
-    await this.runCommand(
-      () => model.setAttnWindow({ attn_window: job.scene.attentionWindow }),
-      "set attention window",
-    );
-    if (job.scene.cameraPose.length > 0) {
+    return this.withGenerationLock(async () => {
+      const startedAt = Date.now();
+      const model = this.beginOperation();
+      if (this.generationActive || job.kind !== "initial") await this.resetAndWait();
+      await this.runCommand(() => model.setSeed({ seed: job.scene.seed }), "set seed");
       await this.runCommand(
-        () => model.setCameraPose({ camera_pose: job.scene.cameraPose }),
-        "set camera pose",
+        () => model.setAttnWindow({ attn_window: job.scene.attentionWindow }),
+        "set attention window",
       );
-    }
-    await this.setImageAndWait(reference);
-    await this.setPromptAndWait(`${job.scene.invariantPrompt} ${job.scene.branchPrompt}`.trim());
-    const firstChunk = this.waitForChunk(job.scene.maximumFirstFrameMs);
-    await this.startAndWaitForVideo(job.scene.maximumFirstFrameMs);
-    const firstChunkIndex = await firstChunk;
-    return { jobId: job.jobId, firstChunkIndex, startedAt, firstFrameAt: Date.now() };
+      if (job.scene.cameraPose.length > 0) {
+        await this.runCommand(
+          () => model.setCameraPose({ camera_pose: job.scene.cameraPose }),
+          "set camera pose",
+        );
+      }
+      await this.setImageAndWait(reference);
+      const prompt = `${job.scene.invariantPrompt} ${job.scene.branchPrompt}`.trim();
+      await this.setPromptAndWait(prompt);
+      const video = this.waitForVideo(job.scene.maximumFirstFrameMs);
+      const firstChunk = this.waitForChunk(job.scene.maximumFirstFrameMs, prompt);
+      const confirmation = Promise.all([video.promise, firstChunk.promise]);
+      try {
+        this.generationActive = true;
+        await this.runCommand(() => model.start(), "start generation");
+        const [stream, firstChunkIndex] = await confirmation;
+        this.stream = stream;
+        return { jobId: job.jobId, firstChunkIndex, startedAt, firstFrameAt: Date.now() };
+      } catch (error) {
+        const failure = this.asLingBotError(error, "LingBot render failed");
+        video.cancel(failure);
+        firstChunk.cancel(failure);
+        await confirmation.catch(() => undefined);
+        throw failure;
+      }
+    });
   }
 
   async applyDelta(input: {
@@ -107,34 +124,46 @@ export class LingBotSession implements LingBotSessionPort {
     cameraPose: number[];
     attentionWindow: "small" | "large" | "auto";
   }): Promise<LingBotRenderReceipt> {
-    const startedAt = Date.now();
-    const model = this.beginOperation();
-    const nextChunk = this.waitForChunk(TIMEOUTS.chunk);
-    await this.runCommand(
-      () => model.setAttnWindow({ attn_window: input.attentionWindow }),
-      "set attention window",
-    );
-    if (input.cameraPose.length > 0) {
-      await this.runCommand(() => model.setCameraPose({ camera_pose: input.cameraPose }), "set camera pose");
-    }
-    await this.setPromptAndWait(input.prompt);
-    const firstChunkIndex = await nextChunk;
-    return { jobId: input.jobId, firstChunkIndex, startedAt, firstFrameAt: Date.now() };
+    return this.withGenerationLock(async () => {
+      const startedAt = Date.now();
+      const model = this.beginOperation();
+      const nextChunk = this.waitForChunk(TIMEOUTS.chunk, input.prompt);
+      try {
+        await this.runCommand(
+          () => model.setAttnWindow({ attn_window: input.attentionWindow }),
+          "set attention window",
+        );
+        if (input.cameraPose.length > 0) {
+          await this.runCommand(() => model.setCameraPose({ camera_pose: input.cameraPose }), "set camera pose");
+        }
+        await this.setPromptAndWait(input.prompt);
+        const firstChunkIndex = await nextChunk.promise;
+        return { jobId: input.jobId, firstChunkIndex, startedAt, firstFrameAt: Date.now() };
+      } catch (error) {
+        const failure = this.asLingBotError(error, "LingBot delta failed");
+        nextChunk.cancel(failure);
+        await nextChunk.promise.catch(() => undefined);
+        throw failure;
+      }
+    });
   }
 
   async pauseAtChunkBoundary(): Promise<void> {
-    const model = this.beginOperation();
-    await this.waitForNextChunk();
-    const paused = this.createWaiter<void>(
-      (resolve) => model.onGenerationPaused(() => resolve()),
-      TIMEOUTS.pause,
-      "generation pause acknowledgement",
-    );
-    await this.commandAndWait(paused, () => model.pause());
+    await this.withGenerationLock(async () => {
+      const model = this.beginOperation();
+      await this.waitForNextChunk();
+      const paused = this.createWaiter<void>(
+        (resolve) => model.onGenerationPaused(() => resolve()),
+        TIMEOUTS.pause,
+        "generation pause acknowledgement",
+      );
+      await this.commandAndWait(paused, () => model.pause());
+      this.generationActive = false;
+    });
   }
 
   waitForNextChunk(): Promise<number> {
-    return this.waitForChunk(TIMEOUTS.chunk);
+    return this.waitForChunk(TIMEOUTS.chunk).promise;
   }
 
   async setNavigation(input: LingBotNavigationInput): Promise<void> {
@@ -174,6 +203,7 @@ export class LingBotSession implements LingBotSessionPort {
     const model = this.model;
     this.model = null;
     this.stream = null;
+    this.generationActive = false;
     this.failPending(new LingBotTransportError("LingBot session disconnected"));
     for (const unsubscribe of [...this.subscriptions]) unsubscribe();
     this.subscriptions.clear();
@@ -189,6 +219,18 @@ export class LingBotSession implements LingBotSessionPort {
   private beginOperation(): LingbotWorld2Model {
     this.lastError = null;
     return this.requireModel();
+  }
+
+  private async withGenerationLock<T>(operation: () => Promise<T>): Promise<T> {
+    let release!: () => void;
+    const previous = this.operationTail;
+    this.operationTail = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+    }
   }
 
   private requireModel(): LingbotWorld2Model {
@@ -232,6 +274,7 @@ export class LingBotSession implements LingBotSessionPort {
       "generation reset acknowledgement",
     );
     await this.commandAndWait(reset, () => model.reset());
+    this.generationActive = false;
   }
 
   private async setImageAndWait(reference: LingBotFileRef): Promise<void> {
@@ -256,24 +299,35 @@ export class LingBotSession implements LingBotSessionPort {
 
   private async startAndWaitForVideo(timeoutMs: number): Promise<void> {
     const model = this.requireModel();
-    const video = this.createWaiter<MediaStream>(
-      (resolve) => model.onMainVideo((_track, stream) => {
-        this.stream = stream;
+    const video = this.waitForVideo(timeoutMs);
+    await this.commandAndWait(video, () => model.start());
+  }
+
+  private waitForVideo(timeoutMs: number): Waiter<MediaStream> {
+    const model = this.requireModel();
+    return this.createWaiter<MediaStream>(
+      (resolve, reject) => model.onMainVideo((_track, stream) => {
+        if (!isMediaStreamLike(stream)) {
+          reject(new LingBotTransportError("LingBot main video event did not contain a MediaStream"));
+          return;
+        }
         resolve(stream);
       }),
       timeoutMs,
       "first LingBot video frame",
     );
-    await this.commandAndWait(video, () => model.start());
   }
 
-  private waitForChunk(timeoutMs: number): Promise<number> {
+  private waitForChunk(timeoutMs: number, expectedPrompt?: string): Waiter<number> {
     const model = this.requireModel();
     return this.createWaiter<number>(
-      (resolve) => model.onChunkComplete((message) => resolve(message.chunk_index)),
+      (resolve) => model.onChunkComplete((message) => {
+        if (expectedPrompt && message.active_prompt !== expectedPrompt) return;
+        resolve(message.chunk_index);
+      }),
       timeoutMs,
       "next LingBot chunk",
-    ).promise;
+    );
   }
 
   private createWaiter<T>(
@@ -360,7 +414,20 @@ export class LingBotSession implements LingBotSessionPort {
     if (this.lastError) throw this.lastError;
   }
 
+  private asLingBotError(error: unknown, message: string): Error {
+    if (error instanceof LingBotCommandError
+      || error instanceof LingBotTimeoutError
+      || error instanceof LingBotTransportError) return error;
+    return this.transportError(message, error);
+  }
+
   private transportError(message: string, cause: unknown): LingBotTransportError {
     return new LingBotTransportError(`${message}: ${errorMessage(cause)}`, cause);
   }
+}
+
+function isMediaStreamLike(value: unknown): value is MediaStream {
+  return typeof value === "object"
+    && value !== null
+    && typeof (value as { getTracks?: unknown }).getTracks === "function";
 }

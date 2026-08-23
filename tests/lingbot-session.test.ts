@@ -13,11 +13,14 @@ const sdk = vi.hoisted(() => {
     autoChunk: true,
     imageCommandError: false,
     imageCommandReject: false,
+    promptCommandReject: false,
+    startCommandReject: false,
   };
   const instances: FakeLingbotWorld2Model[] = [];
 
   class FakeLingbotWorld2Model {
     status = "disconnected";
+    currentPrompt = "";
     commands: Array<{ name: string; payload?: unknown; waiters: number }> = [];
     disconnectCalled = false;
     private listeners = new Map<string, Set<Handler>>();
@@ -100,12 +103,17 @@ const sdk = vi.hoisted(() => {
 
     async setPrompt(payload: unknown) {
       this.record("setPrompt", payload, "prompt_accepted");
+      if (config.promptCommandReject) throw new Error("prompt channel closed");
+      if (typeof payload === "object" && payload !== null && "prompt" in payload && typeof payload.prompt === "string") {
+        this.currentPrompt = payload.prompt;
+      }
       if (config.autoPrompt) this.emit("prompt_accepted", { type: "prompt_accepted", prompt: "accepted" });
     }
 
     async start() {
       this.record("start", undefined, "main_video");
-      if (config.autoVideo) this.emit("main_video", { kind: "track" }, { id: "stream-1" });
+      if (config.startCommandReject) throw new Error("start channel closed");
+      if (config.autoVideo) this.emitVideo();
       if (config.autoChunk) this.emitChunk(0);
     }
 
@@ -138,16 +146,16 @@ const sdk = vi.hoisted(() => {
       this.emit("prompt_accepted", { type: "prompt_accepted", prompt });
     }
 
-    emitVideo() {
-      this.emit("main_video", { kind: "track" }, { id: "stream-1" });
+    emitVideo(stream: unknown = { id: "stream-1", getTracks: () => [] }) {
+      this.emit("main_video", { kind: "track" }, stream);
     }
 
-    emitChunk(chunkIndex: number) {
+    emitChunk(chunkIndex: number, activePrompt = this.currentPrompt || "accepted") {
       this.emit("chunk_complete", {
         type: "chunk_complete",
         chunk_index: chunkIndex,
         active_action: "still",
-        active_prompt: "accepted",
+        active_prompt: activePrompt,
         frames_emitted: 16,
       });
     }
@@ -219,6 +227,8 @@ describe("LingBotSession", () => {
       autoChunk: true,
       imageCommandError: false,
       imageCommandReject: false,
+      promptCommandReject: false,
+      startCommandReject: false,
     });
     vi.unstubAllGlobals();
   });
@@ -247,7 +257,20 @@ describe("LingBotSession", () => {
 
     await rendering;
     expect(receipt).toMatchObject({ jobId: 7, firstChunkIndex: 3 });
-    expect(session.getStream()).toEqual({ id: "stream-1" });
+    expect(session.getStream()).toMatchObject({ id: "stream-1" });
+  });
+
+  it("rejects a main-video event that does not contain a MediaStream-like payload", async () => {
+    sdk.config.autoVideo = false;
+    sdk.config.autoChunk = false;
+    const { session, model } = await connectedSession();
+    const rendering = session.render(makeJob(), reference);
+
+    await vi.waitFor(() => expect(model.commands.at(-1)?.name).toBe("start"));
+    model.emitVideo({ id: "not-a-media-stream" });
+
+    await expect(rendering).rejects.toBeInstanceOf(LingBotTransportError);
+    expect(session.getStream()).toBeNull();
   });
 
   it("registers event waiters before issuing their commands", async () => {
@@ -310,6 +333,47 @@ describe("LingBotSession", () => {
     expect(renderCommands[3].payload).toEqual({ image: reference });
   });
 
+  it("resets before a second initial render", async () => {
+    const { session, model } = await connectedSession();
+
+    await session.render(makeJob(), reference);
+    await session.render(makeJob({ jobId: 8 }), reference);
+
+    expect(model.commands.filter(({ name }) => name === "reset")).toHaveLength(1);
+  });
+
+  it("serializes renders and ignores chunks from the previous prompt", async () => {
+    sdk.config.autoVideo = false;
+    sdk.config.autoChunk = false;
+    const { session, model } = await connectedSession();
+    const firstPrompt = `${makeJob().scene.invariantPrompt} ${makeJob().scene.branchPrompt}`;
+    const second = makeJob({
+      jobId: 8,
+      kind: "branch",
+      scene: { ...makeJob().scene, branchPrompt: "The door is now open to the smoke-filled hall." },
+    });
+    const secondPrompt = `${second.scene.invariantPrompt} ${second.scene.branchPrompt}`;
+    let secondReceipt: unknown;
+
+    const firstRender = session.render(makeJob(), reference);
+    await vi.waitFor(() => expect(model.commands.filter(({ name }) => name === "start")).toHaveLength(1));
+    const secondRender = session.render(second, reference).then((receipt) => { secondReceipt = receipt; });
+    await flush();
+    expect(model.commands.filter(({ name }) => name === "start")).toHaveLength(1);
+
+    model.emitVideo();
+    model.emitChunk(1, firstPrompt);
+    await firstRender;
+    await vi.waitFor(() => expect(model.commands.filter(({ name }) => name === "start")).toHaveLength(2));
+    model.emitVideo();
+    model.emitChunk(99, firstPrompt);
+    await flush();
+    expect(secondReceipt).toBeUndefined();
+    model.emitChunk(0, secondPrompt);
+    await secondRender;
+    expect(secondReceipt).toMatchObject({ jobId: 8, firstChunkIndex: 0 });
+  });
+
   it("applies a bounded prompt and camera delta at a chunk boundary", async () => {
     sdk.config.autoChunk = false;
     const { session, model } = await connectedSession();
@@ -363,6 +427,29 @@ describe("LingBotSession", () => {
 
     await expect(rendering).rejects.toBeInstanceOf(LingBotTransportError);
     await expect(rendering).rejects.toMatchObject({ code: "LINGBOT_TRANSPORT_ERROR" });
+  });
+
+  it("removes video and chunk waiters when start rejects", async () => {
+    sdk.config.startCommandReject = true;
+    const { session, model } = await connectedSession();
+
+    await expect(session.render(makeJob(), reference)).rejects.toBeInstanceOf(LingBotTransportError);
+    expect(model.listenerCount("main_video")).toBe(0);
+    expect(model.listenerCount("chunk_complete")).toBe(0);
+  });
+
+  it("removes the chunk waiter when a delta command rejects", async () => {
+    sdk.config.promptCommandReject = true;
+    sdk.config.autoChunk = false;
+    const { session, model } = await connectedSession();
+
+    await expect(session.applyDelta({
+      jobId: 11,
+      prompt: "The learner crouches below the smoke layer.",
+      cameraPose: [],
+      attentionWindow: "small",
+    })).rejects.toBeInstanceOf(LingBotTransportError);
+    expect(model.listenerCount("chunk_complete")).toBe(0);
   });
 
   it("sends all four navigation axes to idle during stopNavigation", async () => {
