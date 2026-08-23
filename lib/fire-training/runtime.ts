@@ -1,5 +1,6 @@
 import type { FireAction } from "./actions";
 import {
+  availableFireActions,
   createFireTrainingState,
   fireTrainingReducer,
   type FireTrainingState,
@@ -48,13 +49,13 @@ const localActions: FireAction[] = [
   "ListenAlarm",
   "InspectSmoke",
   "FeelDoor",
-  "CrouchLow",
   "UsePhone",
   "SignalWindow",
 ];
 
 function isBranchAction(state: FireTrainingState, action: FireAction): boolean {
   return (state.stage === "decision" && (action === "OpenDoor" || action === "KeepDoorClosed"))
+    || (state.stage === "consequence" && action === "CrouchLow")
     || (state.stage === "secure-door" && action === "CloseDoor");
 }
 
@@ -103,7 +104,8 @@ export function fireRuntimeReducer(state: FireRuntime, event: FireRuntimeEvent):
 
   if (event.type === "BRANCH_REQUESTED") {
     const decisionBranch = state.training.stage === "decision" && state.phase === "decision_ready";
-    const recoveryBranch = state.training.stage === "secure-door" && state.phase === "consequence";
+    const recoveryBranch = (state.training.stage === "consequence" || state.training.stage === "secure-door")
+      && state.phase === "consequence";
     if (state.pendingAction || !isBranchAction(state.training, event.action) || (!decisionBranch && !recoveryBranch)) return state;
     return {
       ...state,
@@ -151,7 +153,7 @@ export function fireRuntimeReducer(state: FireRuntime, event: FireRuntimeEvent):
           { type: "RESTORE_COUNTERFACTUAL" }
         )
         : state.training;
-    if (training.stage !== "counterfactual-decision") return state;
+    if (training.stage !== "counterfactual-decision" || !availableFireActions(training).includes(event.action)) return state;
     return {
       ...state,
       phase: "alternative_rendering",

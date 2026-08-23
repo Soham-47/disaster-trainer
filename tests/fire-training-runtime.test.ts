@@ -109,6 +109,65 @@ describe("fire runtime", () => {
     expect(state.pendingAction).toEqual({ jobId: 6, action: "OpenDoor" });
   });
 
+  it("does not commit CrouchLow before its matching render receipt", () => {
+    let state = reachDecision();
+    state = fireRuntimeReducer(state, { type: "CHECKPOINT_READY", checkpointId: "cp" });
+    state = fireRuntimeReducer(state, { type: "BRANCH_REQUESTED", jobId: 6, action: "OpenDoor" });
+    state = fireRuntimeReducer(state, {
+      type: "BRANCH_RENDERED",
+      receipt: { jobId: 6, firstChunkIndex: 1, startedAt: 100, firstFrameAt: 140 },
+    });
+
+    expect(fireRuntimeReducer(state, { type: "LOCAL_ACTION", action: "CrouchLow" })).toEqual(state);
+    state = fireRuntimeReducer(state, { type: "BRANCH_REQUESTED", jobId: 7, action: "CrouchLow" });
+    expect(state.training.exposure).toBe(65);
+    expect(state.pendingAction).toEqual({ jobId: 7, action: "CrouchLow" });
+
+    state = fireRuntimeReducer(state, {
+      type: "BRANCH_RENDERED",
+      receipt: { jobId: 7, firstChunkIndex: 1, startedAt: 200, firstFrameAt: 250 },
+    });
+    expect(state.training.exposure).toBe(55);
+  });
+
+  it("ignores stale render receipts for CrouchLow", () => {
+    let state = reachDecision();
+    state = fireRuntimeReducer(state, { type: "CHECKPOINT_READY", checkpointId: "cp" });
+    state = fireRuntimeReducer(state, { type: "BRANCH_REQUESTED", jobId: 6, action: "OpenDoor" });
+    state = fireRuntimeReducer(state, {
+      type: "BRANCH_RENDERED",
+      receipt: { jobId: 6, firstChunkIndex: 1, startedAt: 100, firstFrameAt: 140 },
+    });
+    state = fireRuntimeReducer(state, { type: "BRANCH_REQUESTED", jobId: 7, action: "CrouchLow" });
+
+    const stale = fireRuntimeReducer(state, {
+      type: "BRANCH_RENDERED",
+      receipt: { jobId: 8, firstChunkIndex: 1, startedAt: 200, firstFrameAt: 250 },
+    });
+    expect(stale).toEqual(state);
+  });
+
+  it("ignores invalid alternative requests", () => {
+    let state = reachDecision();
+    state = fireRuntimeReducer(state, { type: "CHECKPOINT_READY", checkpointId: "cp" });
+    state = fireRuntimeReducer(state, { type: "BRANCH_REQUESTED", jobId: 4, action: "KeepDoorClosed" });
+    state = fireRuntimeReducer(state, {
+      type: "BRANCH_RENDERED",
+      receipt: { jobId: 4, firstChunkIndex: 1, startedAt: 100, firstFrameAt: 140 },
+    });
+
+    expect(fireRuntimeReducer(state, {
+      type: "ALTERNATIVE_REQUESTED",
+      jobId: 5,
+      action: "KeepDoorClosed",
+    })).toEqual(state);
+    expect(fireRuntimeReducer(state, {
+      type: "ALTERNATIVE_REQUESTED",
+      jobId: 5,
+      action: "CloseDoor",
+    })).toEqual(state);
+  });
+
   it("keeps CloseDoor pending until its matching render receipt", () => {
     let state = reachDecision();
     state = fireRuntimeReducer(state, { type: "CHECKPOINT_READY", checkpointId: "cp" });
@@ -117,13 +176,17 @@ describe("fire runtime", () => {
       type: "BRANCH_RENDERED",
       receipt: { jobId: 6, firstChunkIndex: 1, startedAt: 100, firstFrameAt: 140 },
     });
-    state = fireRuntimeReducer(state, { type: "LOCAL_ACTION", action: "CrouchLow" });
-    state = fireRuntimeReducer(state, { type: "BRANCH_REQUESTED", jobId: 7, action: "CloseDoor" });
+    state = fireRuntimeReducer(state, { type: "BRANCH_REQUESTED", jobId: 7, action: "CrouchLow" });
+    state = fireRuntimeReducer(state, {
+      type: "BRANCH_RENDERED",
+      receipt: { jobId: 7, firstChunkIndex: 1, startedAt: 200, firstFrameAt: 250 },
+    });
+    state = fireRuntimeReducer(state, { type: "BRANCH_REQUESTED", jobId: 8, action: "CloseDoor" });
 
     expect(state.training.completedActions).not.toContain("CloseDoor");
     state = fireRuntimeReducer(state, {
       type: "BRANCH_RENDERED",
-      receipt: { jobId: 7, firstChunkIndex: 1, startedAt: 200, firstFrameAt: 250 },
+      receipt: { jobId: 8, firstChunkIndex: 1, startedAt: 300, firstFrameAt: 350 },
     });
     expect(state.training.completedActions).toContain("CloseDoor");
   });
