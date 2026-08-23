@@ -1,7 +1,7 @@
 import type { FireTrainingStage } from "./reducer";
 import type { ReviewedFireAction } from "../happy-oyster/fire-client";
 
-export const FIRE_WORLD_PROMPT = `First-person nighttime apartment bedroom during the first minute of a realistic structure fire. Keep one stable, coherent room layout across movement: bed behind the camera, closed bedroom door ahead, thin smoke entering only under its gap, window on the right, bedside table with phone and flashlight on the left, bright cloth near the window. Warm low practical lighting, realistic materials and scale, no people, no readable text, no logos, no subtitles. The hallway remains hidden while the door is closed. Support exactly these context actions and preserve their names: ListenAlarm, InspectSmoke, FeelDoor, OpenDoor, KeepDoorClosed, UsePhone, SignalWindow, CrouchLow. OpenDoor must reveal a smoke-filled hot hallway; KeepDoorClosed must preserve the bedroom barrier; UsePhone must keep the learner in the bedroom; SignalWindow must face the same window. Never invent exits, rooms, equipment, people, fire-safety advice, or action outcomes.`;
+export const FIRE_WORLD_PROMPT = `First-person nighttime apartment bedroom during the first minute of a realistic structure fire. Keep one stable, coherent room layout across movement: bed behind the camera, closed bedroom door ahead, thin smoke entering only under its gap, window on the right, bedside table with phone and flashlight on the left, bright cloth near the window. Warm low practical lighting, realistic materials and scale, no people, no readable text, no logos, no subtitles. The hallway remains hidden while the door is closed. Support these context actions: listen to the alarm, inspect smoke, feel the door, open or close the door, keep it closed, use the phone, signal at the window, and crouch low. Opening the door must reveal a smoke-filled hot hallway; closing or keeping it closed must preserve the bedroom barrier; using the phone must keep the learner in the bedroom; signaling must face the same window. Never invent exits, rooms, equipment, people, fire-safety advice, or action outcomes.`;
 
 export const FIRE_REFERENCE_IMAGE = "/references/bedroom-fire-v2.png";
 
@@ -10,6 +10,7 @@ export const FIRE_ACTION_LABELS: Record<ReviewedFireAction, string> = {
   InspectSmoke: "Inspect smoke",
   FeelDoor: "Feel the door",
   OpenDoor: "Open the door",
+  CloseDoor: "Close the door again",
   KeepDoorClosed: "Keep door closed",
   UsePhone: "Call emergency services",
   SignalWindow: "Signal at the window",
@@ -46,6 +47,11 @@ export const FIRE_STAGE_COPY: Record<FireTrainingStage, { priority: string; prom
     priority: "Conditions are changing",
     prompt: "Watch the consequence, then take the available response.",
     hint: "Reduce exposure and communicate your exact location.",
+  },
+  "secure-door": {
+    priority: "Restore the barrier",
+    prompt: "Getting low reduces exposure, but the open door still admits smoke.",
+    hint: "Close the door again before calling from the bedroom.",
   },
   response: {
     priority: "Get help to your location",
@@ -86,3 +92,6 @@ export const FIRE_STAGE_COPY: Record<FireTrainingStage, { priority: string; prom
 
 export const RED_CROSS_FIRE_GUIDANCE_URL =
   "https://www.redcross.org/content/dam/redcross/atg/PDF_s/Preparedness___Disaster_Recovery/Disaster_Preparedness/Home_Fire/FireFAQs.pdf";
+
+export const USFA_FIRE_RECOVERY_URL =
+  "https://www.usfa.fema.gov/downloads/pdf/publications/fire_safety_trailer_curriculum.pdf";

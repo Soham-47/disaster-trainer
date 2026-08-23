@@ -11,6 +11,7 @@ import {
   FIRE_ACTION_LABELS,
   FIRE_STAGE_COPY,
   RED_CROSS_FIRE_GUIDANCE_URL,
+  USFA_FIRE_RECOVERY_URL,
 } from "@/lib/fire-training/content";
 import {
   availableFireActions,
@@ -23,6 +24,7 @@ type SessionResponse = { token: string; worldId: string } | { error: string; mes
 
 const MODEL_ACTIONS = new Set<ReviewedFireAction>([
   "OpenDoor",
+  "CloseDoor",
   "CrouchLow",
 ]);
 
@@ -77,6 +79,16 @@ export function HappyOysterFireTrainer() {
     stopControls();
     void clientRef.current?.disconnect();
   }, [stopControls]);
+
+  useEffect(() => {
+    if (worldStatus !== "error" && worldStatus !== "ended") return;
+    if (["briefing", "debrief", "error"].includes(training.stage)) return;
+    const message = worldStatus === "ended"
+      ? "The live travel ended before the training loop was complete. Restart the scenario to continue."
+      : "The live world connection failed during the scenario. Restart to continue safely.";
+    setError(message);
+    dispatch({ type: "FAIL", message });
+  }, [training.stage, worldStatus]);
 
   const start = useCallback(async () => {
     if (!videoRef.current || busy) return;
@@ -335,6 +347,7 @@ export function HappyOysterFireTrainer() {
                   ))}
                 </dl>
                 <a href={RED_CROSS_FIRE_GUIDANCE_URL} target="_blank" rel="noreferrer" className="mt-8 block text-sm font-semibold text-orange-300 underline decoration-orange-300/30 underline-offset-4">Read the Red Cross home-fire guidance</a>
+                <a href={USFA_FIRE_RECOVERY_URL} target="_blank" rel="noreferrer" className="mt-3 block text-sm font-semibold text-orange-300 underline decoration-orange-300/30 underline-offset-4">Read the U.S. Fire Administration door-recovery guidance</a>
                 <button onClick={() => window.location.reload()} className="mt-6 w-full rounded-full border border-white/15 px-5 py-3 text-sm font-bold hover:bg-white/5">Run the scenario again</button>
               </aside>
             </div>

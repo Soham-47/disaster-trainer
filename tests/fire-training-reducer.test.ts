@@ -26,14 +26,19 @@ describe("apartment-fire training reducer", () => {
 
   it("allows recovery after opening the warm door without changing the teaching truth", () => {
     let state = fireTrainingReducer(createFireTrainingState(), { type: "START" });
-    for (const action of ["ListenAlarm", "InspectSmoke", "FeelDoor", "OpenDoor", "CrouchLow", "UsePhone"] as const) {
+    for (const action of ["ListenAlarm", "InspectSmoke", "FeelDoor", "OpenDoor", "CrouchLow"] as const) {
       state = submit(state, { type: "SUBMIT_ACTION", action });
     }
+
+    expect(state.recovered).toBe(false);
+    expect(availableFireActions(state)).toEqual(["CloseDoor"]);
+    state = submit(state, { type: "SUBMIT_ACTION", action: "CloseDoor" });
+    state = submit(state, { type: "SUBMIT_ACTION", action: "UsePhone" });
 
     expect(state.stage).toBe("outcome");
     expect(state.initialDecision).toBe("OpenDoor");
     expect(state.recovered).toBe(true);
-    expect(state.exposure).toBe(50);
+    expect(state.exposure).toBe(45);
     expect(scoreFireTraining(state, true).actionSequence).toBeLessThan(100);
   });
 

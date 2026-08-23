@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { calls, streamState, FakeHappyOysterModel } = vi.hoisted(() => {
+const { calls, streamState, events, FakeHappyOysterModel } = vi.hoisted(() => {
   const hoistedCalls: Array<[string, unknown?]> = [];
   const hoistedStreamState = { streaming: true };
+  const hoistedEvents: {
+    phase?: (phase: string) => void;
+    travelStatus?: (status: string) => void;
+    travelError?: (error: unknown) => void;
+  } = {};
 
   class HoistedFakeHappyOysterModel {
     phase = "idle";
@@ -15,6 +20,7 @@ const { calls, streamState, FakeHappyOysterModel } = vi.hoisted(() => {
 
     onPhaseChanged(handler: (phase: string) => void) {
       this.phaseHandler = handler;
+      hoistedEvents.phase = handler;
       return () => undefined;
     }
 
@@ -24,6 +30,12 @@ const { calls, streamState, FakeHappyOysterModel } = vi.hoisted(() => {
     }
 
     onTravelError(_handler: (error: unknown) => void) {
+      hoistedEvents.travelError = _handler;
+      return () => undefined;
+    }
+
+    onTravelStatusChanged(handler: (status: string) => void) {
+      hoistedEvents.travelStatus = handler;
       return () => undefined;
     }
 
@@ -65,6 +77,7 @@ const { calls, streamState, FakeHappyOysterModel } = vi.hoisted(() => {
   return {
     calls: hoistedCalls,
     streamState: hoistedStreamState,
+    events: hoistedEvents,
     FakeHappyOysterModel: HoistedFakeHappyOysterModel,
   };
 });
@@ -120,5 +133,17 @@ describe("HappyOysterFireClient", () => {
     expect(calls).toContainEqual(["release", { translation: true }]);
     expect(calls.filter(([name]) => name === "startTravel")).toHaveLength(2);
     expect(calls).toContainEqual(["endTravelSession"]);
+  });
+
+  it("exposes terminal travel states so the trainer can recover", async () => {
+    const client = new HappyOysterFireClient();
+    await client.start({ token: "jwt", worldId: "fire-world", videoElement: {} as HTMLVideoElement });
+
+    events.travelStatus?.("completed");
+    expect(client.getStatus()).toBe("ended");
+
+    await client.start({ token: "jwt", worldId: "fire-world", videoElement: {} as HTMLVideoElement });
+    events.travelError?.(new Error("stream failed"));
+    expect(client.getStatus()).toBe("error");
   });
 });

@@ -10,6 +10,7 @@ export const REVIEWED_FIRE_ACTIONS = [
   "InspectSmoke",
   "FeelDoor",
   "OpenDoor",
+  "CloseDoor",
   "KeepDoorClosed",
   "UsePhone",
   "SignalWindow",
@@ -29,6 +30,7 @@ export type FireWorldStatus =
 
 const PROVIDER_ACTION_ALIASES: Partial<Record<ReviewedFireAction, string[]>> = {
   OpenDoor: ["OpenDoor", "open_close_door", "open_door"],
+  CloseDoor: ["CloseDoor", "open_close_door", "close_door"],
   CrouchLow: ["CrouchLow", "crouch", "take_cover"],
   FeelDoor: ["FeelDoor", "feel_door", "inspect_door"],
   UsePhone: ["UsePhone", "use_phone", "call_for_help"],
@@ -73,7 +75,13 @@ export class HappyOysterFireClient {
       model.onPhaseChanged((phase: HappyOysterPhase) => {
         if (phase === "failed") this.setStatus("error");
         if (phase === "ended" && this.status !== "restarting") this.setStatus("ended");
+        if (phase === "connected" && this.liveConfirmed && this.status === "live") this.setStatus("ended");
         if (phase === "streaming" && this.liveConfirmed) this.setStatus("live");
+      }),
+      model.onTravelStatusChanged((status) => {
+        if (this.status === "restarting") return;
+        if (status === "completed" || status === "ended") this.setStatus("ended");
+        if (status === "failed" || status === "error") this.setStatus("error");
       }),
       model.onTravelState((state: TravelStateMessage) => {
         this.availableActions.clear();

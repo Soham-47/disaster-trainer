@@ -7,6 +7,7 @@ export type FireTrainingStage =
   | "feel-door"
   | "decision"
   | "consequence"
+  | "secure-door"
   | "response"
   | "outcome"
   | "restarting"
@@ -78,6 +79,7 @@ export function availableFireActions(state: FireTrainingState): ReviewedFireActi
     case "feel-door": return ["FeelDoor"];
     case "decision": return ["OpenDoor", "KeepDoorClosed"];
     case "consequence": return state.initialDecision === "OpenDoor" ? ["CrouchLow"] : ["UsePhone"];
+    case "secure-door": return ["CloseDoor"];
     case "response": return state.initialDecision === "OpenDoor" ? ["UsePhone"] : ["SignalWindow"];
     case "counterfactual-decision":
       return state.initialDecision === "OpenDoor" ? ["KeepDoorClosed"] : ["OpenDoor"];
@@ -96,6 +98,7 @@ const consequenceForAction: Record<ReviewedFireAction, string> = {
   InspectSmoke: "Smoke is entering beneath the only hallway door.",
   FeelDoor: "The door is warm, warning that fire may be on the other side.",
   OpenDoor: "Opening the warm door admits hot smoke and increases exposure.",
+  CloseDoor: "Closing the door again restores part of the barrier between you and the hot hallway.",
   KeepDoorClosed: "The closed door continues to separate you from smoke and heat.",
   UsePhone: "Emergency services receive your location and apartment details.",
   SignalWindow: "Your position becomes visible to responders while the door stays closed.",
@@ -156,7 +159,9 @@ export function fireTrainingReducer(
     case "KeepDoorClosed":
       return { ...state, completedActions, initialDecision: "KeepDoorClosed", events, stage: "consequence" };
     case "CrouchLow":
-      return { ...state, completedActions, recovered: true, exposure: Math.max(0, state.exposure - 15), events, stage: "response" };
+      return { ...state, completedActions, exposure: Math.max(0, state.exposure - 10), events, stage: "secure-door" };
+    case "CloseDoor":
+      return { ...state, completedActions, recovered: true, exposure: Math.max(0, state.exposure - 10), events, stage: "response" };
     case "UsePhone":
       return { ...state, completedActions, events, stage: state.initialDecision === "OpenDoor" ? "outcome" : "response" };
     case "SignalWindow":

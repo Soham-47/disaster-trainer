@@ -20,6 +20,8 @@ export function HappyOysterWorldLab() {
     setBusy(true);
     setError(null);
     try {
+      await modelRef.current?.disconnect();
+      modelRef.current = null;
       setStatus("Minting Adventure token");
       const sessionResponse = await fetch("/api/happy-oyster-session", {
         method: "POST",
