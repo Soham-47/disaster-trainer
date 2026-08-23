@@ -23,6 +23,12 @@ describe("fire LingBot scenes", () => {
     expect(sceneForFireAction("CloseDoor").id).toBe("fire-door-reclosed");
   });
 
+  it("defines a stable post-transition state for every door branch", () => {
+    expect(FIRE_UNSAFE_SCENE.settledPrompt).toContain("remains fully open");
+    expect(FIRE_SAFE_SCENE.settledPrompt).toContain("remains fully closed");
+    expect(FIRE_RECOVERY_SCENE.settledPrompt).toContain("remains fully closed");
+  });
+
   it("forbids text, people, extra exits and invented advice in every scene", () => {
     for (const scene of [FIRE_INITIAL_SCENE, FIRE_UNSAFE_SCENE, FIRE_SAFE_SCENE, FIRE_RECOVERY_SCENE]) {
       expect(scene.forbiddenVisualFacts).toEqual(expect.arrayContaining([

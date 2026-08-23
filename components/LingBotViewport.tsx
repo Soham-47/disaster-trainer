@@ -17,7 +17,7 @@ export type LingBotViewportProps = {
   onVideoReady: () => void;
 };
 
-const transitionPhases = new Set<TrainerRuntimeState>(["checkpointing", "branch_rendering", "rewinding", "alternative_rendering"]);
+const transitionPhases = new Set<TrainerRuntimeState>(["checkpointing", "branch_rendering", "rewinding", "alternative", "alternative_rendering"]);
 
 export function LingBotViewport({ stream, phase, transitionFrame, transitionLabel, navigationEnabled, onNavigation, onCaptureReady, onVideoReady }: LingBotViewportProps) {
   const videoRef = useRef<HTMLVideoElement>(null);

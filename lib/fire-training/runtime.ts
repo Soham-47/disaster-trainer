@@ -42,6 +42,7 @@ export type FireRuntimeEvent =
   | { type: "BRANCH_REQUESTED"; jobId: number; action: FireAction }
   | { type: "BRANCH_RENDERED"; receipt: LingBotRenderReceipt }
   | { type: "BRANCH_FAILED"; jobId: number; message: string }
+  | { type: "START_ALTERNATIVE" }
   | { type: "ALTERNATIVE_REQUESTED"; jobId: number; action: FireAction }
   | { type: "ALTERNATIVE_RENDERED"; receipt: LingBotRenderReceipt }
   | { type: "DEBRIEF_READY" }
@@ -148,21 +149,26 @@ export function fireRuntimeReducer(state: FireRuntime, event: FireRuntimeEvent):
     };
   }
 
+  if (event.type === "START_ALTERNATIVE") {
+    if (state.pendingAction || state.phase !== "consequence") return state;
+    const training = fireTrainingReducer(
+      fireTrainingReducer(state.training, { type: "START_COUNTERFACTUAL" }),
+      { type: "RESTORE_COUNTERFACTUAL" },
+    );
+    if (training.stage !== "counterfactual-decision") return state;
+    return { ...state, phase: "alternative", training, error: null };
+  }
+
   if (event.type === "ALTERNATIVE_REQUESTED") {
-    if (state.pendingAction) return state;
-    const training = state.training.stage === "counterfactual-decision"
-      ? state.training
-      : state.phase === "consequence"
-        ? fireTrainingReducer(
-          fireTrainingReducer(state.training, { type: "START_COUNTERFACTUAL" }),
-          { type: "RESTORE_COUNTERFACTUAL" }
-        )
-        : state.training;
-    if (training.stage !== "counterfactual-decision" || !availableFireActions(training).includes(event.action)) return state;
+    if (
+      state.pendingAction
+      || state.phase !== "alternative"
+      || state.training.stage !== "counterfactual-decision"
+      || !availableFireActions(state.training).includes(event.action)
+    ) return state;
     return {
       ...state,
       phase: "alternative_rendering",
-      training,
       pendingAction: { jobId: event.jobId, action: event.action },
       error: null,
     };

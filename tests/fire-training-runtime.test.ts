@@ -62,6 +62,10 @@ describe("fire runtime", () => {
       type: "BRANCH_RENDERED",
       receipt: { jobId: 4, firstChunkIndex: 1, startedAt: 100, firstFrameAt: 140 },
     });
+    state = fireRuntimeReducer(state, { type: "START_ALTERNATIVE" });
+    expect(state.phase).toBe("alternative");
+    expect(state.training.stage).toBe("counterfactual-decision");
+    expect(state.training.alternativeDecision).toBeNull();
     state = fireRuntimeReducer(state, { type: "ALTERNATIVE_REQUESTED", jobId: 5, action: "OpenDoor" });
     expect(state.training.alternativeDecision).toBeNull();
     state = fireRuntimeReducer(state, {
@@ -80,6 +84,7 @@ describe("fire runtime", () => {
       type: "BRANCH_RENDERED",
       receipt: { jobId: 4, firstChunkIndex: 1, startedAt: 100, firstFrameAt: 140 },
     });
+    state = fireRuntimeReducer(state, { type: "START_ALTERNATIVE" });
     state = fireRuntimeReducer(state, { type: "ALTERNATIVE_REQUESTED", jobId: 5, action: "OpenDoor" });
 
     const stale = fireRuntimeReducer(state, {
@@ -97,6 +102,7 @@ describe("fire runtime", () => {
       type: "BRANCH_RENDERED",
       receipt: { jobId: 4, firstChunkIndex: 1, startedAt: 100, firstFrameAt: 140 },
     });
+    state = fireRuntimeReducer(state, { type: "START_ALTERNATIVE" });
     state = fireRuntimeReducer(state, { type: "ALTERNATIVE_REQUESTED", jobId: 5, action: "OpenDoor" });
     const beforeFailure = state.training;
     state = fireRuntimeReducer(state, { type: "BRANCH_FAILED", jobId: 5, message: "first frame timeout" });

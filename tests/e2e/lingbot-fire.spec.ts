@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test.describe("LingBot apartment-fire trainer", () => {
   test("keeps controls behind the live boot gate and then starts the mock world", async ({ page }) => {
     await page.goto("/?mockWorld=1");
-    await expect(page.getByRole("heading", { name: "Connecting to LingBot World 2" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Begin scenario" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Begin scenario" })).toBeVisible();
     await expect(page.getByTestId("lingbot-live-video")).toHaveCount(0);
     await page.waitForTimeout(300);

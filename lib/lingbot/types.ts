@@ -18,6 +18,7 @@ export type LingBotSceneContract = {
   seed: number;
   invariantPrompt: string;
   branchPrompt: string;
+  settledPrompt?: string;
   requiredVisualFacts: string[];
   forbiddenVisualFacts: string[];
   cameraPose: number[];
