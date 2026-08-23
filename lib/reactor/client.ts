@@ -150,6 +150,37 @@ export class ReactorClient implements WorldModelAdapter {
     }
   }
 
+  private waitForModelReady(model: LingbotWorld2Model): Promise<void> {
+    if (model.getStatus() === "ready") return Promise.resolve();
+
+    return new Promise<void>((resolve, reject) => {
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      const cleanup = () => {
+        if (timeoutId) clearTimeout(timeoutId);
+        model.off("statusChanged", onStatusChanged);
+      };
+      const onStatusChanged = (status: string) => {
+        if (status === "ready") {
+          cleanup();
+          resolve();
+        } else if (status === "error" || status === "disconnected") {
+          cleanup();
+          reject(new Error(`SDK connection entered ${status} state`));
+        }
+      };
+
+      model.on("statusChanged", onStatusChanged);
+      if (model.getStatus() === "ready") {
+        onStatusChanged("ready");
+        return;
+      }
+      timeoutId = setTimeout(() => {
+        cleanup();
+        reject(new Error("SDK connection did not become ready"));
+      }, REACTOR_TIMEOUTS.CONNECT);
+    });
+  }
+
   private async settleCleanup(operation: Promise<unknown>): Promise<void> {
     await Promise.race([
       operation.catch(() => undefined),
@@ -346,6 +377,11 @@ export class ReactorClient implements WorldModelAdapter {
         model.connect(tokenResult.token),
         REACTOR_TIMEOUTS.CONNECT,
         "SDK connection"
+      );
+      await this.waitForStartupStage(
+        this.waitForModelReady(model),
+        REACTOR_TIMEOUTS.CONNECT,
+        "SDK ready state"
       );
 
       // Step 2: Upload Reference Image

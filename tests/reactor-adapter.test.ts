@@ -7,6 +7,8 @@ vi.mock("@reactor-models/lingbot-world-2", () => {
     private imageHandler?: () => void;
     private promptHandler?: (message: { prompt: string }) => void;
     private mainVideoHandler?: (track: unknown, stream: unknown) => void;
+    private statusHandler?: (status: string) => void;
+    private status = "waiting";
 
     onImageAccepted(handler: () => void) {
       this.imageHandler = handler;
@@ -23,12 +25,27 @@ vi.mock("@reactor-models/lingbot-world-2", () => {
     onGenerationResumed() {}
     onCommandError() {}
     on(event: string, handler: (value: unknown) => void) {
+      if (event === "statusChanged") this.statusHandler = handler as (status: string) => void;
       return () => undefined;
     }
 
-    async connect() {}
+    off() {}
+
+    getStatus() {
+      return this.status;
+    }
+
+    async connect() {
+      setTimeout(() => {
+        this.status = "ready";
+        this.statusHandler?.("ready");
+      }, 10);
+    }
 
     async uploadFile() {
+      if (this.status !== "ready") {
+        throw new Error(`Cannot upload file, status is "${this.status}". Must be "ready".`);
+      }
       return { id: "fake-reference-file" };
     }
 
