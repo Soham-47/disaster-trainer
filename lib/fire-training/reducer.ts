@@ -1,4 +1,4 @@
-import type { ReviewedFireAction } from "../happy-oyster/fire-client";
+import type { FireAction } from "./actions";
 
 export type FireTrainingStage =
   | "briefing"
@@ -19,14 +19,14 @@ export type FireTrainingStage =
 export type FireDecision = "OpenDoor" | "KeepDoorClosed";
 
 export type FireTrainingEvent = {
-  action: ReviewedFireAction;
+  action: FireAction;
   stage: FireTrainingStage;
   consequence: string;
 };
 
 export type FireTrainingState = {
   stage: FireTrainingStage;
-  completedActions: ReviewedFireAction[];
+  completedActions: FireAction[];
   discoveredCues: string[];
   initialDecision: FireDecision | null;
   alternativeDecision: FireDecision | null;
@@ -40,7 +40,7 @@ export type FireTrainingState = {
 
 export type FireTrainingAction =
   | { type: "START" }
-  | { type: "SUBMIT_ACTION"; action: ReviewedFireAction }
+  | { type: "SUBMIT_ACTION"; action: FireAction }
   | { type: "REQUEST_HINT" }
   | { type: "START_COUNTERFACTUAL" }
   | { type: "RESTORE_COUNTERFACTUAL" }
@@ -74,7 +74,7 @@ export function createFireTrainingState(): FireTrainingState {
   };
 }
 
-export function availableFireActions(state: FireTrainingState): ReviewedFireAction[] {
+export function availableFireActions(state: FireTrainingState): FireAction[] {
   switch (state.stage) {
     case "observe-alarm": return ["ListenAlarm"];
     case "inspect-smoke": return ["InspectSmoke"];
@@ -89,13 +89,13 @@ export function availableFireActions(state: FireTrainingState): ReviewedFireActi
   }
 }
 
-const cueForAction: Partial<Record<ReviewedFireAction, string>> = {
+const cueForAction: Partial<Record<FireAction, string>> = {
   ListenAlarm: "alarm",
   InspectSmoke: "smoke-under-door",
   FeelDoor: "warm-door",
 };
 
-const consequenceForAction: Record<ReviewedFireAction, string> = {
+const consequenceForAction: Record<FireAction, string> = {
   ListenAlarm: "The alarm is continuous: treat it as a real fire warning.",
   InspectSmoke: "Smoke is entering beneath the only hallway door.",
   FeelDoor: "The door is warm, warning that fire may be on the other side.",

@@ -5,8 +5,8 @@ import { directionFromKeys, lookFromMouseDelta, type AdventureDirection } from "
 import {
   HappyOysterFireClient,
   type FireWorldStatus,
-  type ReviewedFireAction,
 } from "@/lib/happy-oyster/fire-client";
+import type { FireAction } from "@/lib/fire-training/actions";
 import {
   FIRE_ACTION_LABELS,
   FIRE_STAGE_COPY,
@@ -23,7 +23,7 @@ import { preparedAssetForFireAction } from "@/lib/fire-training/visual-continuat
 
 type SessionResponse = { token: string; worldId: string } | { error: string; message: string };
 
-const MODEL_ACTIONS = new Set<ReviewedFireAction>([
+const MODEL_ACTIONS = new Set<FireAction>([
   "OpenDoor",
   "CloseDoor",
   "CrouchLow",
@@ -115,7 +115,7 @@ export function HappyOysterFireTrainer() {
     }
   }, [attachClient, busy]);
 
-  const performAction = useCallback(async (action: ReviewedFireAction) => {
+  const performAction = useCallback(async (action: FireAction) => {
     if (busy || !actions.includes(action) || (worldStatus !== "live" && !preparedAsset)) return;
     setBusy(true);
     setError(null);

@@ -4,20 +4,10 @@ import {
   type TravelStateMessage,
 } from "@reactor-models/happy-oyster";
 import type { AdventureDirection, AdventureLook } from "./controls";
+import { FIRE_ACTIONS, type FireAction } from "../fire-training/actions";
 
-export const REVIEWED_FIRE_ACTIONS = [
-  "ListenAlarm",
-  "InspectSmoke",
-  "FeelDoor",
-  "OpenDoor",
-  "CloseDoor",
-  "KeepDoorClosed",
-  "UsePhone",
-  "SignalWindow",
-  "CrouchLow",
-] as const;
-
-export type ReviewedFireAction = (typeof REVIEWED_FIRE_ACTIONS)[number];
+export const REVIEWED_FIRE_ACTIONS = FIRE_ACTIONS;
+export type ReviewedFireAction = FireAction;
 export type FireWorldStatus =
   | "idle"
   | "connecting"
