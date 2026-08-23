@@ -29,6 +29,14 @@ describe("fire LingBot scenes", () => {
     expect(FIRE_RECOVERY_SCENE.settledPrompt).toContain("remains fully closed");
   });
 
+  it("locks the door before the learner chooses and makes the unsafe branch visibly fiery", () => {
+    expect(FIRE_INITIAL_SCENE.branchPrompt).toContain("does not open");
+    expect(FIRE_INITIAL_SCENE.branchPrompt).toContain("stationary");
+    expect(FIRE_UNSAFE_SCENE.branchPrompt).toContain("visible orange flames");
+    expect(FIRE_UNSAFE_SCENE.branchPrompt).toContain("exactly one");
+    expect(FIRE_UNSAFE_SCENE.settledPrompt).toContain("banging");
+  });
+
   it("forbids text, people, extra exits and invented advice in every scene", () => {
     for (const scene of [FIRE_INITIAL_SCENE, FIRE_UNSAFE_SCENE, FIRE_SAFE_SCENE, FIRE_RECOVERY_SCENE]) {
       expect(scene.forbiddenVisualFacts).toEqual(expect.arrayContaining([

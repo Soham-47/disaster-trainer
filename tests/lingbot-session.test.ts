@@ -389,6 +389,23 @@ describe("LingBotSession", () => {
     expect(renderCommands[3].payload).toEqual({ image: reference });
   });
 
+  it("includes the settled visual constraint in the first branch prompt", async () => {
+    const { session, model } = await connectedSession();
+    await session.render(makeJob({
+      kind: "branch",
+      scene: {
+        ...makeJob().scene,
+        branchPrompt: "The door opens once to the hot hallway.",
+        settledPrompt: "After that one movement, keep the door fully open and motionless; no banging.",
+      },
+    }), reference);
+
+    const prompt = model.commands.find(({ name }) => name === "setPrompt")?.payload;
+    expect(prompt).toEqual({
+      prompt: "Keep the same bedroom and learner viewpoint. The door opens once to the hot hallway. After that one movement, keep the door fully open and motionless; no banging.",
+    });
+  });
+
   it("resets before a second initial render", async () => {
     const { session, model } = await connectedSession();
 

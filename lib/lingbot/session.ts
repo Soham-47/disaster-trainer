@@ -125,7 +125,10 @@ export class LingBotSession implements LingBotSessionPort {
         );
       }
       await this.setImageAndWait(reference);
-      const prompt = `${job.scene.invariantPrompt} ${job.scene.branchPrompt}`.trim();
+      const prompt = [job.scene.invariantPrompt, job.scene.branchPrompt, job.scene.settledPrompt]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
       await this.setPromptAndWait(prompt);
       const video = this.waitForVideo(job.scene.maximumFirstFrameMs);
       const firstChunk = this.waitForChunk(job.scene.maximumFirstFrameMs, prompt);

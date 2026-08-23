@@ -156,7 +156,7 @@ export function useLingBotFireController(providedSession?: LingBotSessionPort): 
         if (scene.settledPrompt) {
           await activeSession.applyDelta({
             jobId,
-            prompt: `${scene.invariantPrompt} ${scene.settledPrompt}`,
+            prompt: [scene.invariantPrompt, scene.branchPrompt, scene.settledPrompt].filter(Boolean).join(" "),
             cameraPose: scene.cameraPose,
             attentionWindow: scene.attentionWindow,
           });
