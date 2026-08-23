@@ -181,6 +181,31 @@ export class ReactorClient implements WorldModelAdapter {
     });
   }
 
+  private waitForModelSignal(
+    subscribe: (handler: () => void) => () => void,
+    ms: number,
+    reason: string
+  ): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      let unsubscribe: (() => void) | null = null;
+      const cleanup = () => {
+        if (timeoutId) clearTimeout(timeoutId);
+        unsubscribe?.();
+      };
+      const onSignal = () => {
+        cleanup();
+        resolve();
+      };
+
+      unsubscribe = subscribe(onSignal);
+      timeoutId = setTimeout(() => {
+        cleanup();
+        reject(new Error(`Timed out waiting for ${reason}`));
+      }, ms);
+    });
+  }
+
   private async settleCleanup(operation: Promise<unknown>): Promise<void> {
     await Promise.race([
       operation.catch(() => undefined),
@@ -402,7 +427,13 @@ export class ReactorClient implements WorldModelAdapter {
           }
 
           const fileRef = await model.uploadFile(imageBlob, { name: "reference.jpg" });
+          const imageAccepted = this.waitForModelSignal(
+            (handler) => model.onImageAccepted(() => handler()),
+            REACTOR_TIMEOUTS.IMAGE,
+            "image acceptance"
+          );
           await model.setImage({ image: fileRef });
+          await imageAccepted;
         })(),
         REACTOR_TIMEOUTS.IMAGE,
         "image upload & acceptance"
@@ -412,8 +443,14 @@ export class ReactorClient implements WorldModelAdapter {
       // of truth for acceptance; these calls only enqueue the commands.
       await this.waitForStartupStage(
         (async () => {
+          const promptAccepted = this.waitForModelSignal(
+            (handler) => model.onPromptAccepted(() => handler()),
+            REACTOR_TIMEOUTS.PROMPT,
+            "prompt acceptance"
+          );
           await model.setSeed({ seed: this.currentSeed });
           await model.setPrompt({ prompt: this.currentPrompt });
+          await promptAccepted;
         })(),
         REACTOR_TIMEOUTS.PROMPT,
         "prompt acceptance"
@@ -448,12 +485,21 @@ export class ReactorClient implements WorldModelAdapter {
     this.clearTimeoutTimer();
     if (this.currentMode === "live" && this.model) {
       try {
-        await this.model.pause();
+        const model = this.model;
+        await Promise.all([
+          model.pause(),
+          this.waitForModelSignal(
+            (handler) => model.onGenerationPaused(() => handler()),
+            REACTOR_TIMEOUTS.BRANCH,
+            "pause acknowledgement"
+          ),
+        ]);
       } catch (err) {
         await this.useFallback(
           this.activeFallbackAsset || "/fallbacks/fire-bedroom-orient.mp4",
           `Pause failed: ${err instanceof Error ? err.message : String(err)}`
         );
+        throw err;
       }
     } else {
       this.setStatus("paused");
@@ -467,12 +513,21 @@ export class ReactorClient implements WorldModelAdapter {
   public async resume(): Promise<void> {
     if (this.currentMode === "live" && this.model) {
       try {
-        await this.model.resume();
+        const model = this.model;
+        await Promise.all([
+          model.resume(),
+          this.waitForModelSignal(
+            (handler) => model.onGenerationResumed(() => handler()),
+            REACTOR_TIMEOUTS.BRANCH,
+            "resume acknowledgement"
+          ),
+        ]);
       } catch (err) {
         await this.useFallback(
           this.activeFallbackAsset || "/fallbacks/fire-bedroom-orient.mp4",
           `Resume failed: ${err instanceof Error ? err.message : String(err)}`
         );
+        throw err;
       }
     } else {
       this.setStatus("generating");
@@ -491,7 +546,24 @@ export class ReactorClient implements WorldModelAdapter {
         "branch prompt switch",
         this.activeFallbackAsset || "/fallbacks/fire-bedroom-orient.mp4"
       );
-      await this.model.setPrompt({ prompt });
+        const model = this.model;
+        try {
+          await Promise.all([
+            model.setPrompt({ prompt }),
+            this.waitForModelSignal(
+              (handler) => model.onPromptAccepted(() => handler()),
+              REACTOR_TIMEOUTS.BRANCH,
+              "branch prompt acceptance"
+            ),
+          ]);
+        this.clearTimeoutTimer();
+      } catch (err) {
+        await this.useFallback(
+          this.activeFallbackAsset || "/fallbacks/fire-bedroom-orient.mp4",
+          `Prompt change failed: ${err instanceof Error ? err.message : String(err)}`
+        );
+        throw err;
+      }
     } else {
       this.events.emit("prompt_accepted", {
         prompt,

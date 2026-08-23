@@ -17,6 +17,7 @@ import type { ChoiceDefinition, GeneratedScenario } from "@/lib/scenario/types";
 import type { SessionResult } from "@/lib/scenario/types";
 import { scoreSession } from "@/lib/scenario/scoring";
 import { buildWorldModelPrompt, normalizeScenarioBrief } from "@/lib/scenario/prompt";
+import { playAlternative as playAlternativeBranch, playConsequence } from "@/lib/player/world-actions";
 
 type ExperiencePlayerProps = {
   scenario?: GeneratedScenario;
@@ -150,8 +151,7 @@ export function ExperiencePlayer({
     setAmbientPrompt(consequencePrompt);
     setActiveAsset(consequence.fallbackAsset);
     try {
-      await adapter.applyPrompt(consequencePrompt);
-      await adapter.resume();
+      await playConsequence(adapter, consequencePrompt);
     } catch (error) {
       dispatch({ type: "FAIL", error: error instanceof Error ? error.message : "Unable to play consequence" });
     } finally {
@@ -189,8 +189,7 @@ export function ExperiencePlayer({
     setAmbientPrompt(consequencePrompt);
     setActiveAsset(consequence.fallbackAsset);
     try {
-      await adapter.applyPrompt(consequencePrompt);
-      await adapter.resume();
+      await playAlternativeBranch(adapter, consequencePrompt);
       setAlternativeStarted(true);
     } catch (error) {
       dispatch({ type: "FAIL", error: error instanceof Error ? error.message : "Unable to play counterfactual" });

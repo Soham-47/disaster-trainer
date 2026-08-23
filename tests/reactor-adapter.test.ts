@@ -4,32 +4,45 @@ import path from "path";
 
 vi.mock("@reactor-models/lingbot-world-2", () => {
   class FakeLingbotWorld2Model {
-    private imageHandler?: () => void;
-    private promptHandler?: (message: { prompt: string }) => void;
+    private imageHandlers = new Set<() => void>();
+    private promptHandlers = new Set<(message: { prompt: string }) => void>();
     private mainVideoHandler?: (track: unknown, stream: unknown) => void;
+    private pauseHandlers = new Set<() => void>();
+    private resumeHandlers = new Set<() => void>();
     private statusHandler?: (status: string) => void;
     private status = "waiting";
+    private imageAccepted = false;
+    private promptAccepted = false;
 
     onImageAccepted(handler: () => void) {
-      this.imageHandler = handler;
+      this.imageHandlers.add(handler);
+      return () => this.imageHandlers.delete(handler);
     }
 
     onPromptAccepted(handler: (message: { prompt: string }) => void) {
-      this.promptHandler = handler;
+      this.promptHandlers.add(handler);
+      return () => this.promptHandlers.delete(handler);
     }
 
     onConditionsReady() {}
     onGenerationStarted() {}
     onChunkComplete() {}
-    onGenerationPaused() {}
-    onGenerationResumed() {}
+    onGenerationPaused(handler: () => void) {
+      this.pauseHandlers.add(handler);
+      return () => this.pauseHandlers.delete(handler);
+    }
+    onGenerationResumed(handler: () => void) {
+      this.resumeHandlers.add(handler);
+      return () => this.resumeHandlers.delete(handler);
+    }
     onCommandError() {}
     on(event: string, handler: (value: unknown) => void) {
       if (event === "statusChanged") this.statusHandler = handler as (status: string) => void;
       return () => undefined;
     }
 
-    off() {}
+    off(event?: string) {
+    }
 
     getStatus() {
       return this.status;
@@ -50,16 +63,24 @@ vi.mock("@reactor-models/lingbot-world-2", () => {
     }
 
     async setImage() {
-      this.imageHandler?.();
+      setTimeout(() => {
+        this.imageAccepted = true;
+        this.imageHandlers.forEach((handler) => handler());
+      }, 10);
     }
 
     async setSeed() {}
 
     async setPrompt(input: { prompt: string }) {
-      this.promptHandler?.(input);
+      setTimeout(() => {
+        this.promptAccepted = true;
+        this.promptHandlers.forEach((handler) => handler(input));
+      }, 10);
     }
 
     async start() {
+      if (!this.imageAccepted) throw new Error("No image set. Call set_image first.");
+      if (!this.promptAccepted) throw new Error("No prompt set. Call set_prompt first.");
       setTimeout(() => {
         this.mainVideoHandler?.({ kind: "video" }, { kind: "stream" });
       }, 25);
@@ -69,8 +90,16 @@ vi.mock("@reactor-models/lingbot-world-2", () => {
       this.mainVideoHandler = handler;
     }
 
-    async pause() {}
-    async resume() {}
+    async pause() {
+      setTimeout(() => {
+        this.pauseHandlers.forEach((handler) => handler());
+      }, 10);
+    }
+    async resume() {
+      setTimeout(() => {
+        this.resumeHandlers.forEach((handler) => handler());
+      }, 10);
+    }
     async reset() {}
     async disconnect() {}
   }
@@ -192,6 +221,65 @@ describe("ReactorClient Adapter", () => {
     expect(client.getMode()).toBe("live");
     expect(client.getStatus()).toBe("generating");
     expect(client.getActiveFallbackAsset()).toBeNull();
+  });
+
+  it("waits for live pause and resume acknowledgements", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((url) => {
+      if (typeof url === "string" && url.includes("/api/reactor-token")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ token: "jwt_test_token", mode: "live" }),
+        });
+      }
+      return Promise.resolve({ ok: true, blob: async () => new Blob(["test"]) });
+    }));
+
+    await client.start({
+      referenceImage: "/references/bedroom-fire.jpg",
+      prompt: "Bedroom fire scenario prompt",
+      seed: 12345,
+      fallbackAsset: "/fallbacks/fire-bedroom-orient.mp4",
+    });
+
+    const pausePromise = client.pause();
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    expect(client.getStatus()).toBe("generating");
+    await pausePromise;
+    expect(client.getStatus()).toBe("paused");
+
+    const resumePromise = client.resume();
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    expect(client.getStatus()).toBe("paused");
+    await resumePromise;
+    expect(client.getStatus()).toBe("generating");
+  });
+
+  it("waits for prompt acceptance before resolving a live branch change", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((url) => {
+      if (typeof url === "string" && url.includes("/api/reactor-token")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ token: "jwt_test_token", mode: "live" }),
+        });
+      }
+      return Promise.resolve({ ok: true, blob: async () => new Blob(["test"]) });
+    }));
+
+    await client.start({
+      referenceImage: "/references/bedroom-fire.jpg",
+      prompt: "Bedroom fire scenario prompt",
+      seed: 12345,
+      fallbackAsset: "/fallbacks/fire-bedroom-orient.mp4",
+    });
+
+    let settled = false;
+    const promptPromise = client.applyPrompt("The closed door stays shut.").then(() => {
+      settled = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    expect(settled).toBe(false);
+    await promptPromise;
+    expect(settled).toBe(true);
   });
 
   it("should transition to fallback mode when useFallback is called", async () => {

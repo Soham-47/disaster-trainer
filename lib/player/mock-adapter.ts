@@ -50,6 +50,7 @@ export class MockWorldModelAdapter implements WorldModelAdapter {
   }
 
   async resume(): Promise<void> {
+    if (this.status !== "paused") throw new Error("Cannot resume while the stream is not paused");
     this.setStatus("generating");
   }
 
