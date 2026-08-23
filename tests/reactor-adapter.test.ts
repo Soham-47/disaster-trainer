@@ -144,6 +144,7 @@ describe("ReactorClient Adapter", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   it("requests a model-scoped Reactor token using the documented contract", async () => {
@@ -175,6 +176,20 @@ describe("ReactorClient Adapter", () => {
       if (originalKey === undefined) delete process.env.REACTOR_API_KEY;
       else process.env.REACTOR_API_KEY = originalKey;
     }
+  });
+
+  it("exchanges a Reactor token in the production runtime", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("REACTOR_API_KEY", "test-reactor-key");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ jwt: "jwt_production_token", expires_at: 123 }),
+    }));
+
+    const response = await tokenRoute();
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ token: "jwt_production_token", mode: "live" });
   });
 
   it("should initialize with idle status", () => {

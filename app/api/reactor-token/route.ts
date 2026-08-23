@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 
 export async function POST() {
-  if (process.env.NODE_ENV === "production") {
-    return NextResponse.json({ error: "REMOVED", message: "LingBot sessions are disabled." }, { status: 410 });
-  }
   const apiKey = process.env.REACTOR_API_KEY ? process.env.REACTOR_API_KEY.trim() : null;
   if (!apiKey) {
     return NextResponse.json(
@@ -83,9 +80,6 @@ export async function POST() {
 }
 
 export async function GET() {
-  if (process.env.NODE_ENV === "production") {
-    return NextResponse.json({ error: "REMOVED" }, { status: 410 });
-  }
   const apiKey = process.env.REACTOR_API_KEY ? process.env.REACTOR_API_KEY.trim() : null;
   return NextResponse.json({
     status: "ok",
