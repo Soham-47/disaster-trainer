@@ -1,8 +1,8 @@
 "use client";
 
-import { SimulationPlayer } from "@/components/SimulationPlayer";
+import { HappyOysterFireTrainer } from "@/components/HappyOysterFireTrainer";
 
 export default function CounterfactualDisasterTrainerPage() {
-  return <SimulationPlayer />;
+  return <HappyOysterFireTrainer />;
 }
 

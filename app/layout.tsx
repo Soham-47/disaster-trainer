@@ -2,9 +2,9 @@ import "./globals.css";
 import React from "react";
 
 export const metadata = {
-  title: "Counterfactual Disaster Trainer — Reactor World Model",
+  title: "Apartment Fire Trainer — Happy Oyster",
   description:
-    "Interactive disaster decision trainer powered by LingBot World 2 and deterministic safety scenario engine.",
+    "A live first-person apartment-fire training simulation powered by Happy Oyster and a deterministic safety engine.",
 };
 
 export default function RootLayout({

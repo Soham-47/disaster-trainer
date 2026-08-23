@@ -27,6 +27,14 @@ export type FireWorldStatus =
   | "ended"
   | "error";
 
+const PROVIDER_ACTION_ALIASES: Partial<Record<ReviewedFireAction, string[]>> = {
+  OpenDoor: ["OpenDoor", "open_close_door", "open_door"],
+  CrouchLow: ["CrouchLow", "crouch", "take_cover"],
+  FeelDoor: ["FeelDoor", "feel_door", "inspect_door"],
+  UsePhone: ["UsePhone", "use_phone", "call_for_help"],
+  SignalWindow: ["SignalWindow", "signal_window", "signal_for_help"],
+};
+
 type StartInput = {
   token: string;
   worldId: string;
@@ -112,6 +120,14 @@ export class HappyOysterFireClient {
     await this.model.look(direction);
   }
 
+  async releaseMovement() {
+    if (this.status === "live" && this.model) await this.model.release({ translation: true });
+  }
+
+  async releaseLook() {
+    if (this.status === "live" && this.model) await this.model.release({ rotation: true });
+  }
+
   async stop() {
     if (this.model && this.status === "live") await this.model.stop();
   }
@@ -121,10 +137,21 @@ export class HappyOysterFireClient {
       throw new Error(`Interaction "${action}" is not reviewed for this scenario.`);
     }
     if (!this.model || this.status !== "live") throw new Error("The live world is not ready.");
-    if (this.availableActions.size > 0 && !this.availableActions.has(action)) {
+    const aliases = PROVIDER_ACTION_ALIASES[action] ?? [action];
+    const providerAction = aliases.find((alias) => this.availableActions.has(alias));
+    if (!providerAction) {
       throw new Error(`Interaction "${action}" is not available in the attached world.`);
     }
-    await this.model.interact(action);
+    await this.model.interact(providerAction);
+    await new Promise((resolve) => setTimeout(resolve, 280));
+    await this.model.release({ interaction: true });
+  }
+
+  async approachAndInteract(action: ReviewedFireAction, approachMs = 900) {
+    await this.move("Front");
+    if (approachMs > 0) await new Promise((resolve) => setTimeout(resolve, approachMs));
+    await this.releaseMovement();
+    await this.interact(action);
   }
 
   async restartTravel() {

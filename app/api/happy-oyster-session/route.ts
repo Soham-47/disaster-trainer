@@ -2,9 +2,15 @@ import { NextResponse } from "next/server";
 
 const MODEL = "reactor/happy-oyster-adventure";
 
-export async function POST() {
+export async function POST(request: Request) {
   const apiKey = process.env.REACTOR_API_KEY?.trim();
   const worldId = process.env.HAPPY_OYSTER_FIRE_WORLD_ID?.trim();
+  let buildIntent = false;
+  try {
+    buildIntent = (await request.json()).intent === "build";
+  } catch {
+    buildIntent = false;
+  }
 
   if (!apiKey) {
     return NextResponse.json(
@@ -12,7 +18,10 @@ export async function POST() {
       { status: 500 }
     );
   }
-  if (!worldId) {
+  if (buildIntent && process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "NOT_FOUND", message: "World building is disabled." }, { status: 404 });
+  }
+  if (!worldId && !buildIntent) {
     return NextResponse.json(
       { error: "MISSING_WORLD_ID", message: "HAPPY_OYSTER_FIRE_WORLD_ID is not configured." },
       { status: 503 }
@@ -51,7 +60,7 @@ export async function POST() {
         { status: 502 }
       );
     }
-    return NextResponse.json({ token, worldId });
+    return NextResponse.json({ token, worldId: worldId ?? null });
   } catch {
     return NextResponse.json(
       { error: "NETWORK_ERROR", message: "Could not contact Reactor before the timeout." },

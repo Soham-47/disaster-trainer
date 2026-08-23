@@ -42,8 +42,8 @@ const { calls, streamState, FakeHappyOysterModel } = vi.hoisted(() => {
       if (hoistedStreamState.streaming) {
         this.phaseHandler?.("streaming");
         this.travelStateHandler?.({
-          environment_actions: ["FeelDoor", "OpenDoor", "KeepDoorClosed", "UsePhone", "SignalWindow"],
-          character_actions: ["CrouchLow"],
+          environment_actions: ["open_close_door", "take_cover"],
+          character_actions: ["crouch", "jump", "attack"],
         });
       }
       return {
@@ -55,6 +55,8 @@ const { calls, streamState, FakeHappyOysterModel } = vi.hoisted(() => {
     async move(value: string) { hoistedCalls.push(["move", value]); }
     async look(value: string) { hoistedCalls.push(["look", value]); }
     async interact(value: string) { hoistedCalls.push(["interact", value]); }
+    async control(value: unknown) { hoistedCalls.push(["control", value]); }
+    async release(value: unknown) { hoistedCalls.push(["release", value]); }
     async stop() { hoistedCalls.push(["stop"]); }
     async endTravelSession() { hoistedCalls.push(["endTravelSession"]); }
     async disconnect() { hoistedCalls.push(["disconnect"]); }
@@ -91,7 +93,7 @@ describe("HappyOysterFireClient", () => {
       ["startTravel"],
     ]);
     expect(statuses.at(-1)).toBe("live");
-    expect(client.getAvailableActions()).toContain("OpenDoor");
+    expect(client.getAvailableActions()).toContain("open_close_door");
   });
 
   it("rejects a session that does not publish a live stream", async () => {
@@ -107,11 +109,15 @@ describe("HappyOysterFireClient", () => {
     const client = new HappyOysterFireClient();
     await client.start({ token: "jwt", worldId: "fire-world", videoElement: {} as HTMLVideoElement });
 
-    await client.interact("FeelDoor");
+    await client.interact("OpenDoor");
+    await client.approachAndInteract("OpenDoor", 0);
     await expect(client.interact("Attack" as never)).rejects.toThrow("not reviewed");
     await client.restartTravel();
 
-    expect(calls).toContainEqual(["interact", "FeelDoor"]);
+    expect(calls).toContainEqual(["interact", "open_close_door"]);
+    expect(calls).toContainEqual(["release", { interaction: true }]);
+    expect(calls).toContainEqual(["move", "Front"]);
+    expect(calls).toContainEqual(["release", { translation: true }]);
     expect(calls.filter(([name]) => name === "startTravel")).toHaveLength(2);
     expect(calls).toContainEqual(["endTravelSession"]);
   });
