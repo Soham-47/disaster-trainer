@@ -87,4 +87,19 @@ describe("simulation reducer", () => {
     expect(next.world?.nodeId).toBe(state.world?.nodeId);
     expect(next.eventLog[0]).toMatchObject({ kind: "hint", sequence: 1 });
   });
+
+  it("replays the alternate checkpoint action after restoring the original world state", () => {
+    let state = createSimulationState();
+    state = simulationReducer(state, { type: "START_EPISODE", graph: episode });
+    state = simulationReducer(state, { type: "ADVANCE_NODE", nodeId: "choice" });
+    state = simulationReducer(state, { type: "SAVE_CHECKPOINT", checkpoint: { id: "cp-2", nodeId: "choice", frameDataUrl: "data:image/png;base64,frame", worldState: state.world!, createdAt: 1 } });
+    state = simulationReducer(state, { type: "SUBMIT_ACTION", intent: { verb: "wait", targetId: "door", source: "hotspot" } });
+    state = simulationReducer(state, { type: "START_REWIND" });
+    state = simulationReducer(state, { type: "RESTORE_CHECKPOINT", checkpointId: "cp-2" });
+    state = simulationReducer(state, { type: "SUBMIT_ACTION", intent: { verb: "move", targetId: "hallway", source: "hotspot" } });
+
+    expect(state.world?.nodeId).toBe("complete");
+    expect(state.eventLog.filter((event) => event.kind === "action")).toHaveLength(2);
+    expect(state.eventLog.some((event) => event.kind === "rewind")).toBe(true);
+  });
 });

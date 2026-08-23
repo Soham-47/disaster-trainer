@@ -50,9 +50,11 @@ export function SimulationPlayer({ adapter = reactorClient }: SimulationPlayerPr
   const [pending, setPending] = useState(false);
   const [startupError, setStartupError] = useState<string | null>(null);
   const [isRewinding, setIsRewinding] = useState(false);
+  const [alternativeStarted, setAlternativeStarted] = useState(false);
   const [sessionAssessment, setSessionAssessment] = useState<ReturnType<typeof scoreSimulation> | null>(null);
   const frameRef = useRef<string | null>(null);
   const primaryStateRef = useRef<SimulationState | null>(null);
+  const initialActionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = adapter.onStatus((nextStatus) => {
@@ -151,6 +153,7 @@ export function SimulationPlayer({ adapter = reactorClient }: SimulationPlayerPr
     setFallbackAsset(nextNode.scene.fallbackAsset);
     try {
       if (currentNode.checkpoint) {
+        if (!initialActionIdRef.current) initialActionIdRef.current = interaction.id;
         await adapter.stopNavigation();
         await adapter.pause().catch(() => undefined);
         const frameDataUrl = await waitForCapturedFrame();
@@ -189,9 +192,45 @@ export function SimulationPlayer({ adapter = reactorClient }: SimulationPlayerPr
 
   const handleHint = (hintId: string) => dispatch({ type: "REQUEST_HINT", hintId });
 
+  const replayAlternative = async () => {
+    const graph = simulation.graph;
+    const world = simulation.world;
+    const checkpointId = world?.checkpointId;
+    const checkpoint = checkpointId ? simulation.checkpoints[checkpointId] : null;
+    if (!graph || !world || !checkpoint || !initialActionIdRef.current || pending) return;
+    const checkpointNode = graph.nodes[checkpoint.nodeId];
+    const alternate = checkpointNode?.interactions.find((interaction) => interaction.id !== initialActionIdRef.current);
+    if (!alternate) return;
+    const alternativeNode = graph.nodes[alternate.nextNodeId];
+    if (!alternativeNode) return;
+    if (!primaryStateRef.current) primaryStateRef.current = simulation;
+    setPending(true);
+    setFallbackAsset(alternativeNode.scene.fallbackAsset);
+    setIsRewinding(true);
+    dispatch({ type: "START_REWIND" });
+    try {
+      await adapter.restartFromCheckpoint({
+        frameDataUrl: checkpoint.frameDataUrl,
+        prompt: `${alternativeNode.scene.invariantPrompt} ${alternativeNode.scene.deltaPrompt}`,
+        seed: alternativeNode.scene.seed,
+        attentionWindow: alternativeNode.scene.attentionWindow,
+        fallbackAsset: alternativeNode.scene.fallbackAsset,
+      });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "Prepared counterfactual continuation selected";
+      await adapter.useFallback(alternativeNode.scene.fallbackAsset, reason);
+      setFallbackReason(reason);
+    }
+    dispatch({ type: "RESTORE_CHECKPOINT", checkpointId: checkpoint.id });
+    dispatch({ type: "SUBMIT_ACTION", intent: { verb: alternate.verb, targetId: alternate.targetId, toolId: alternate.toolId, source: "hotspot" } });
+    setAlternativeStarted(true);
+    setIsRewinding(false);
+    setPending(false);
+  };
+
   const continueToTransfer = async () => {
     if (!transferGraph || !simulation.world || pending) return;
-    primaryStateRef.current = simulation;
+    if (!primaryStateRef.current) primaryStateRef.current = simulation;
     setPending(true);
     await startWorld(transferGraph);
     dispatch({ type: "START_TRANSFER", graph: transferGraph, resources: ["phone"] });
@@ -216,6 +255,8 @@ export function SimulationPlayer({ adapter = reactorClient }: SimulationPlayerPr
     setStartupError(null);
     setCapturedFrame(null);
     frameRef.current = null;
+    initialActionIdRef.current = null;
+    setAlternativeStarted(false);
     setPending(false);
   };
 
@@ -240,6 +281,7 @@ export function SimulationPlayer({ adapter = reactorClient }: SimulationPlayerPr
           <p className="text-[10px] font-mono uppercase tracking-[0.25em] text-amber-300">Readiness assessment</p>
           <h1 className="mt-3 text-3xl font-semibold text-white">You experienced two futures.</h1>
           <p className="mt-4 text-sm leading-6 text-neutral-300">{sessionAssessment?.summary ?? "The scenario was completed."}</p>
+          {sessionAssessment && <p className="mt-3 text-2xl font-semibold text-amber-200">{sessionAssessment.overall}/100 <span className="text-xs font-normal text-neutral-400">readiness signal</span></p>}
           <p className="mt-5 text-xs text-neutral-400">{sessionAssessment?.scoreEligible ? "Live run eligible for assessment." : "Prepared continuation used; safety state was recorded but this run is not scored."}</p>
           <button type="button" onClick={() => void restart()} className="mt-7 rounded-xl bg-amber-300 px-5 py-3 text-sm font-bold text-neutral-950 hover:bg-amber-200">Run another scenario</button>
         </section>
@@ -263,7 +305,8 @@ export function SimulationPlayer({ adapter = reactorClient }: SimulationPlayerPr
             <h2 className="mt-2 text-xl font-semibold text-white">Name what changed after your action.</h2>
             <p className="mt-2 text-sm leading-6 text-neutral-300">{graph?.debrief.warningCue} {graph?.debrief.principle}</p>
             <p className="mt-2 text-sm text-amber-200">Recommended principle: {graph?.debrief.recommendedAction}</p>
-            <button type="button" disabled={pending} onClick={() => phase === "primary" ? void continueToTransfer() : finishSession()} className="mt-4 w-full rounded-xl bg-purple-300 px-4 py-3 text-sm font-bold text-neutral-950 hover:bg-purple-200 disabled:opacity-50">{phase === "primary" ? "Try the transfer scenario" : "Complete readiness assessment"}</button>
+            {graph?.debrief.source && <a href={graph.debrief.source.url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-neutral-400 underline decoration-neutral-600 underline-offset-2 hover:text-white">Source: {graph.debrief.source.organization}</a>}
+            <button type="button" disabled={pending} onClick={() => phase === "primary" ? (alternativeStarted ? void continueToTransfer() : void replayAlternative()) : finishSession()} className="mt-4 w-full rounded-xl bg-purple-300 px-4 py-3 text-sm font-bold text-neutral-950 hover:bg-purple-200 disabled:opacity-50">{phase === "primary" ? (alternativeStarted ? "Try the transfer scenario" : "Rewind and experience the alternative") : "Complete readiness assessment"}</button>
           </div>
         )}
         {currentNode && world?.status === "active" && (
