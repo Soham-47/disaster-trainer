@@ -1,8 +1,8 @@
 "use client";
 
-import { HappyOysterFireTrainer } from "@/components/HappyOysterFireTrainer";
+import { LingBotFireTrainer } from "@/components/LingBotFireTrainer";
 
 export default function CounterfactualDisasterTrainerPage() {
-  return <HappyOysterFireTrainer />;
+  return <LingBotFireTrainer />;
 }
 

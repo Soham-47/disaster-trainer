@@ -43,7 +43,9 @@ export type FireRuntimeEvent =
   | { type: "BRANCH_RENDERED"; receipt: LingBotRenderReceipt }
   | { type: "BRANCH_FAILED"; jobId: number; message: string }
   | { type: "ALTERNATIVE_REQUESTED"; jobId: number; action: FireAction }
-  | { type: "ALTERNATIVE_RENDERED"; receipt: LingBotRenderReceipt };
+  | { type: "ALTERNATIVE_RENDERED"; receipt: LingBotRenderReceipt }
+  | { type: "DEBRIEF_READY" }
+  | { type: "FAIL"; message: string };
 
 const localActions: FireAction[] = [
   "ListenAlarm",
@@ -80,6 +82,9 @@ export function createFireRuntime(): FireRuntime {
 }
 
 export function fireRuntimeReducer(state: FireRuntime, event: FireRuntimeEvent): FireRuntime {
+  if (event.type === "FAIL") {
+    return { ...state, phase: "fatal", training: fireTrainingReducer(state.training, { type: "FAIL", message: event.message }), error: event.message, pendingAction: null };
+  }
   if (event.type === "LIVE_READY") {
     if (state.phase !== "booting") return state;
     return {
@@ -160,6 +165,15 @@ export function fireRuntimeReducer(state: FireRuntime, event: FireRuntimeEvent):
       training,
       pendingAction: { jobId: event.jobId, action: event.action },
       error: null,
+    };
+  }
+
+  if (event.type === "DEBRIEF_READY") {
+    if (state.phase !== "alternative" || state.training.stage !== "counterfactual-consequence") return state;
+    return {
+      ...state,
+      phase: "debrief",
+      training: fireTrainingReducer(state.training, { type: "ADVANCE_DEBRIEF" }),
     };
   }
 

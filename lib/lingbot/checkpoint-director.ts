@@ -15,6 +15,8 @@ export class CheckpointDirector {
 
   constructor(private readonly session: LingBotSessionPort) {}
 
+  peekNextJobId(): number { return this.nextJobId; }
+
   async prepareCheckpoint(input: {
     id: string;
     capture: () => string;

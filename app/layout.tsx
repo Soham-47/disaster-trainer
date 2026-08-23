@@ -2,9 +2,9 @@ import "./globals.css";
 import React from "react";
 
 export const metadata = {
-  title: "Apartment Fire Trainer — Happy Oyster",
+  title: "Apartment Fire Trainer — LingBot World 2",
   description:
-    "A live first-person apartment-fire training simulation powered by Happy Oyster and a deterministic safety engine.",
+    "A live first-person apartment-fire training simulation powered by LingBot World 2 and a deterministic safety engine.",
 };
 
 export default function RootLayout({
