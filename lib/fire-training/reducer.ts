@@ -31,6 +31,7 @@ export type FireTrainingState = {
   initialDecision: FireDecision | null;
   alternativeDecision: FireDecision | null;
   exposure: number;
+  doorSecured: boolean;
   recovered: boolean;
   hintsUsed: number;
   error: string | null;
@@ -65,6 +66,7 @@ export function createFireTrainingState(): FireTrainingState {
     initialDecision: null,
     alternativeDecision: null,
     exposure: 0,
+    doorSecured: true,
     recovered: false,
     hintsUsed: 0,
     error: null,
@@ -155,15 +157,21 @@ export function fireTrainingReducer(
     case "FeelDoor":
       return { ...state, completedActions, discoveredCues, events, stage: "decision" };
     case "OpenDoor":
-      return { ...state, completedActions, initialDecision: "OpenDoor", exposure: 65, events, stage: "consequence" };
+      return { ...state, completedActions, initialDecision: "OpenDoor", doorSecured: false, exposure: 65, events, stage: "consequence" };
     case "KeepDoorClosed":
       return { ...state, completedActions, initialDecision: "KeepDoorClosed", events, stage: "consequence" };
     case "CrouchLow":
       return { ...state, completedActions, exposure: Math.max(0, state.exposure - 10), events, stage: "secure-door" };
     case "CloseDoor":
-      return { ...state, completedActions, recovered: true, exposure: Math.max(0, state.exposure - 10), events, stage: "response" };
+      return { ...state, completedActions, doorSecured: true, exposure: Math.max(0, state.exposure - 10), events, stage: "response" };
     case "UsePhone":
-      return { ...state, completedActions, events, stage: state.initialDecision === "OpenDoor" ? "outcome" : "response" };
+      return {
+        ...state,
+        completedActions,
+        recovered: state.initialDecision === "OpenDoor" ? state.doorSecured : state.recovered,
+        events,
+        stage: state.initialDecision === "OpenDoor" ? "outcome" : "response",
+      };
     case "SignalWindow":
       return { ...state, completedActions, events, stage: "outcome" };
   }

@@ -33,6 +33,8 @@ describe("apartment-fire training reducer", () => {
     expect(state.recovered).toBe(false);
     expect(availableFireActions(state)).toEqual(["CloseDoor"]);
     state = submit(state, { type: "SUBMIT_ACTION", action: "CloseDoor" });
+    expect(state.recovered).toBe(false);
+    expect(state.doorSecured).toBe(true);
     state = submit(state, { type: "SUBMIT_ACTION", action: "UsePhone" });
 
     expect(state.stage).toBe("outcome");
