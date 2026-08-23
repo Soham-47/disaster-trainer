@@ -115,7 +115,10 @@ export function fireTrainingReducer(
   if (event.type === "START") return { ...createFireTrainingState(), stage: "observe-alarm" };
   if (event.type === "FAIL") return { ...state, stage: "error", error: event.message };
   if (event.type === "REQUEST_HINT") return { ...state, hintsUsed: state.hintsUsed + 1 };
-  if (event.type === "START_COUNTERFACTUAL" && state.stage === "outcome") {
+  if (event.type === "START_COUNTERFACTUAL" && (
+    state.stage === "outcome"
+    || (state.stage === "consequence" && state.initialDecision === "KeepDoorClosed")
+  )) {
     return { ...state, stage: "restarting" };
   }
   if (event.type === "RESTORE_COUNTERFACTUAL" && state.stage === "restarting") {
